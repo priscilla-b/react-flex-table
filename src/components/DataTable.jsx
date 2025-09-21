@@ -2,8 +2,6 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import {
   flexRender,
   getCoreRowModel,
-  getSortedRowModel,
-  getFilteredRowModel,
   useReactTable,
   createColumnHelper,
 } from '@tanstack/react-table'
@@ -82,6 +80,7 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, s
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
   const [dragging, setDragging] = useState(null)
+  const [refreshTrigger, setRefreshTrigger] = useState(0)
 
   const dragCol = useRef(null)
 
@@ -128,9 +127,11 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, s
     onRowSelectionChange: setRowSelection,
     onPaginationChange: setPagination,
     getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
     enableColumnResizing: true,
+    manualPagination: true,
+    pageCount: Math.ceil(total / pagination.pageSize) || -1,
+    autoResetPageIndex: false,
+    autoResetAll: false,
     meta: {
       onUpdateCell: async (id, key, value) => {
         setData(prev => prev.map(r => r.id===id ? { ...r, [key]: value } : r))
@@ -180,7 +181,7 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, s
     }
     run()
     return ()=>{ active = false }
-  }, [fetcher, pagination.pageIndex, pagination.pageSize, sorting, columnFilters])
+  }, [fetcher, pagination.pageIndex, pagination.pageSize, sorting, columnFilters, refreshTrigger])
 
   const selectedCount = Object.keys(rowSelection).length
 
@@ -203,14 +204,14 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, s
                 owner: 'Teammate A',
                 annual_revenue: 0,
                 next_action_date: new Date().toISOString().split('T')[0],
-                created_at: new Date().toISOString()
+                created_at: new Date().toISOString(),
+                tags: JSON.stringify([])
               }
               
               const createdRecord = await onCreate(newRecord)
               
-              setData(prev => [createdRecord, ...prev])
-              
-              setPagination(prev => ({ ...prev, pageIndex: 0 }))
+              // Refresh data from server
+              setRefreshTrigger(prev => prev + 1)
             } catch (error) {
               console.error('Failed to create record:', error)
             }
@@ -227,10 +228,10 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, s
             try {
               await onBulkDelete(selectedIds)
 
-              setData(prev => prev.filter(r => !selectedIds.includes(r.id)))
               setRowSelection({})
-
-              setPagination(prev => ({ ...prev, pageIndex: 0 }))
+              
+              // Refresh data from server
+              setRefreshTrigger(prev => prev + 1)
             } catch (error) {
               console.error('Failed to delete records:', error)
             }
@@ -310,7 +311,7 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, s
                   {loading ? (
                     <div className="p-8 text-center">
                       <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                      <p className="mt-2 text-sm text-gray-500">Loading data...</p>
+                      <p className="mt-2 text-sm text-gray-500">Loading page {pagination.pageIndex + 1}...</p>
                     </div>
                     ) : (
                       rowVirtualizer.getVirtualItems().map(virtualRow => {
