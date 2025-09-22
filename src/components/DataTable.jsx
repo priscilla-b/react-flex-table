@@ -11,11 +11,53 @@ import debounce from 'lodash.debounce'
 import Toolbar from './Toolbar'
 import ColumnVisibilityMenu from './ColumnVisibilityMenu'
 import SavedViews from './SavedViews'
-import Filters from './Filters'
+import Filters, { createDefaultFilterState, sanitizeFilterState } from './Filters'
 import { fetchViews, createView, updateView, deleteViewServer } from '../lib/dataFetcher'
 
 const columnHelper = createColumnHelper()
-const RESOURCE = 'leads';
+const RESOURCE = 'leads'
+const FILTER_COLUMN_ID = '__filters__'
+
+function stableStringify(value) {
+  return JSON.stringify(value, (_, val) => {
+    if (val && typeof val === 'object' && !Array.isArray(val)) {
+      return Object.keys(val)
+        .sort()
+        .reduce((acc, key) => {
+          acc[key] = val[key]
+          return acc
+        }, {})
+    }
+    return val
+  })
+}
+
+function filterStatesEqual(a, b) {
+  return stableStringify(a) === stableStringify(b)
+}
+
+function extractFilterStateFromColumns(filtersArray) {
+  if (!Array.isArray(filtersArray) || filtersArray.length === 0) {
+    return createDefaultFilterState()
+  }
+
+  const entry = filtersArray.find(item => item?.id === FILTER_COLUMN_ID)
+  if (entry && entry.value) {
+    return sanitizeFilterState(entry.value)
+  }
+
+  const simple = {}
+  filtersArray.forEach(item => {
+    if (!item || typeof item !== 'object') return
+    const { id, value } = item
+    if (!id || value === '' || value === null || value === undefined) return
+    simple[id] = value
+  })
+
+  const fallback = sanitizeFilterState(simple)
+  fallback.mode = 'simple'
+  return fallback
+}
 
 function EditableCell({ getValue, row, column, table }) {
   const initial = getValue()
@@ -77,16 +119,21 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, s
   const [data, setData] = useState([])
   const [rowSelection, setRowSelection] = useState({})
   const [sorting, setSorting] = useState([])
-  const [columnFilters, setColumnFilters] = useState([])
+  const [filterState, setFilterState] = useState(createDefaultFilterState())
   const [columnOrder, setColumnOrder] = useState([])
   const [columnVisibility, setColumnVisibility] = useState({})
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 25 })
   const [views, setViews] = useState([])
-  const [viewLoading, setViewLoading] = useState(false);
+  const [viewLoading, setViewLoading] = useState(false)
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
   const [dragging, setDragging] = useState(null)
   const [refreshTrigger, setRefreshTrigger] = useState(0)
+
+  const dragCol = useRef(null)
+  const parentRef = useRef(null)
+
+
 
   const filterOptions = useMemo(() => {
     const getOptions = (key) => {
@@ -100,31 +147,41 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, s
     }
   }, [userColumns])
 
-  const activeFilters = useMemo(
-    () => Object.fromEntries(columnFilters.map(f => [f.id, f.value])),
-    [columnFilters]
-  )
+  const columnFilters = useMemo(() => ([{ id: FILTER_COLUMN_ID, value: filterState }]), [filterState])
 
-  const updateColumnFilters = useCallback((updater) => {
-    setColumnFilters(prev => {
-      const next = typeof updater === 'function' ? updater(prev) : updater
-      return next
+  const applyFilters = useCallback((nextFilters) => {
+    const sanitized = sanitizeFilterState(nextFilters)
+    let changed = false
+    setFilterState(prev => {
+      if (filterStatesEqual(prev, sanitized)) return prev
+      changed = true
+      return sanitized
     })
-    setPagination(prev => ({ ...prev, pageIndex: 0 }))
+    if (changed) {
+      setPagination(prev => ({ ...prev, pageIndex: 0 }))
+    }
   }, [])
 
-  const applyFilterObject = useCallback((filtersObj) => {
-    const next = Object.entries(filtersObj || {})
-      .filter(([, value]) => value !== '' && value !== null && value !== undefined)
-      .map(([id, value]) => ({ id, value }))
-    updateColumnFilters(next)
-  }, [updateColumnFilters])
-
   const clearFilters = useCallback(() => {
-    updateColumnFilters([])
-  }, [updateColumnFilters])
+    applyFilters(createDefaultFilterState())
+  }, [applyFilters])
 
-  const dragCol = useRef(null)
+  const handleColumnFiltersChange = useCallback((updater) => {
+    let changed = false
+    setFilterState(prev => {
+      const prevArray = [{ id: FILTER_COLUMN_ID, value: prev }]
+      const nextArray = typeof updater === 'function' ? updater(prevArray) : updater
+      const entry = Array.isArray(nextArray) ? nextArray.find(item => item?.id === FILTER_COLUMN_ID) : null
+      if (!entry) return prev
+      const sanitized = sanitizeFilterState(entry.value)
+      if (filterStatesEqual(prev, sanitized)) return prev
+      changed = true
+      return sanitized
+    })
+    if (changed) {
+      setPagination(prev => ({ ...prev, pageIndex: 0 }))
+    }
+  }, [])
 
   const columns = useMemo(()=>{
     return [
@@ -163,7 +220,7 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, s
     columns,
     state: { sorting, columnFilters, columnOrder, columnVisibility, rowSelection, pagination },
     onSortingChange: setSorting,
-    onColumnFiltersChange: updateColumnFilters,
+    onColumnFiltersChange: handleColumnFiltersChange,
     onColumnOrderChange: setColumnOrder,
     onColumnVisibilityChange: setColumnVisibility,
     onRowSelectionChange: setRowSelection,
@@ -191,8 +248,6 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, s
     columnResizeMode: 'onChange'
   })
 
-  // Virtualization
-  const parentRef = useRef(null)
   const rowVirtualizer = useVirtualizer({
     count: table.getRowModel().rows.length,
     getScrollElement: () => parentRef.current,
@@ -200,7 +255,25 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, s
     overscan: 10,
   })
 
-  // Fetch data
+  useEffect(() => {
+    let mounted = true
+    const loadViews = async () => {
+      try {
+        setViewLoading(true)
+        const res = await fetchViews(RESOURCE)
+        if (mounted) {
+          setViews(res)
+        }
+      } finally {
+        if (mounted) setViewLoading(false)
+      }
+    }
+    loadViews()
+    return () => {
+      mounted = false
+    }
+  }, [])
+
   useEffect(()=>{
     let active = true
     const run = async()=>{
@@ -211,7 +284,7 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, s
           pageSize: pagination.pageSize,
           sort: sorting[0]?.id,
           dir: sorting[0]?.desc ? 'desc' : 'asc',
-          filters: Object.fromEntries(columnFilters.map(f => [f.id, f.value]))
+          filters: filterState
         }
         const res = await fetcher(q)
         if(!active) return
@@ -223,52 +296,40 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, s
     }
     run()
     return ()=>{ active = false }
-  }, [fetcher, pagination.pageIndex, pagination.pageSize, sorting, columnFilters, refreshTrigger])
+  }, [fetcher, pagination.pageIndex, pagination.pageSize, sorting, filterState, refreshTrigger])
 
   const selectedCount = Object.keys(rowSelection).length
+  const pageCount = Math.max(1, Math.ceil(total / pagination.pageSize))
 
-  const pageCount = Math.ceil(total / pagination.pageSize)
-
-  // Saved views
-
-  // load views from server
-  useEffect(() => {
-    (async () => {
-      setViewLoading(true);
-      try {
-        const res = await fetchViews(RESOURCE);
-        setViews(res);
-      } finally { setViewLoading(false); }
-    })();
-  }, []);
-   
   function currentStateSnapshot() {
-    return { sorting, columnFilters, columnOrder, columnVisibility, pagination };
+    return { sorting, columnFilters, columnOrder, columnVisibility, pagination }
   }
 
   function applyViewState(st) {
-    setSorting(st.sorting ?? []);
-    setColumnFilters(st.columnFilters ?? []);
-    setColumnOrder(st.columnOrder ?? []);
-    setColumnVisibility(st.columnVisibility ?? {});
-    setPagination(st.pagination ?? { pageIndex: 0, pageSize: 25 });
+    setSorting(st.sorting ?? [])
+    setColumnOrder(st.columnOrder ?? [])
+    setColumnVisibility(st.columnVisibility ?? {})
+    setPagination(st.pagination ?? { pageIndex: 0, pageSize: 25 })
+
+    const nextFilters = extractFilterStateFromColumns(st.columnFilters)
+    setFilterState(prev => (filterStatesEqual(prev, nextFilters) ? prev : nextFilters))
   }
 
   async function saveCurrentView(name, { visibility='private', isDefault=false } = {}) {
-    const state = currentStateSnapshot();
-    const created = await createView(RESOURCE, name, state, visibility, isDefault);
-    setViews(v => [...v.filter(x => x.id !== created.id), created].sort((a,b)=>a.name.localeCompare(b.name)));
+    const state = currentStateSnapshot()
+    const created = await createView(RESOURCE, name, state, visibility, isDefault)
+    setViews(v => [...v.filter(x => x.id !== created.id), created].sort((a,b)=>a.name.localeCompare(b.name)))
   }
 
   async function loadViewById(id) {
-    const v = views.find(x => x.id === id);
-    if (!v) return;
-    applyViewState(v.state);
+    const v = views.find(x => x.id === id)
+    if (!v) return
+    applyViewState(v.state)
   }
 
   async function deleteViewById(id) {
-    await deleteViewServer(id);
-    setViews(v => v.filter(x => x.id !== id));
+    await deleteViewServer(id)
+    setViews(v => v.filter(x => x.id !== id))
   }
 
   async function editViewMeta(id, { name, visibility }) {
@@ -283,6 +344,12 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, s
     const state = currentStateSnapshot()
     const updated = await updateView(id, { state })
     setViews(v => v.map(x => x.id === id ? updated : x))
+  }
+
+  const renderSortIndicator = (header) => {
+    const sortState = header.column.getIsSorted()
+    if (!sortState) return ''
+    return sortState === 'asc' ? 'v' : '^'
   }
 
   return (
@@ -305,10 +372,7 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, s
                 created_at: new Date().toISOString(),
                 tags: JSON.stringify([])
               }
-              
-              const createdRecord = await onCreate(newRecord)
-              
-              // Refresh data from server
+              await onCreate(newRecord)
               setRefreshTrigger(prev => prev + 1)
             } catch (error) {
               console.error('Failed to create record:', error)
@@ -325,10 +389,7 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, s
           if (onBulkDelete) {
             try {
               await onBulkDelete(selectedIds)
-
               setRowSelection({})
-              
-              // Refresh data from server
               setRefreshTrigger(prev => prev + 1)
             } catch (error) {
               console.error('Failed to delete records:', error)
@@ -339,8 +400,8 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, s
       >
         <ColumnVisibilityMenu table={table} />
         <Filters
-          filters={activeFilters}
-          onApply={applyFilterObject}
+          filters={filterState}
+          onApply={applyFilters}
           onClear={clearFilters}
           options={filterOptions}
         />
@@ -351,94 +412,94 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, s
           onDelete={deleteViewById}
           onEditMeta={editViewMeta}
           onSaveState={saveCurrentStateToView}
+          loading={viewLoading}
         />
       </Toolbar>
 
       <div className="table-container">
-      
         <div ref={parentRef} className="max-h-[520px] overflow-auto custom-scrollbar border-t border-gray-200">
-            <div className="overflow-x-auto">
-              <table className="min-w-full">
-
-                <thead className="table-header">
-                  {table.getHeaderGroups().map(headerGroup => (
-                    <tr key={headerGroup.id}>
-                      {headerGroup.headers.map(header => (
-                        <th
-                          key={header.id}
-                          style={{ width: header.getSize() }}
-                          className={cls(
-                            'table-header-cell',
-                            header.column.id === dragging && 'dragging'
-                          )}
-                          draggable
-                          onDragStart={()=>{ 
-                            dragCol.current = header.column.id
-                            setDragging(header.column.id)
-                          }}
-                          onDragEnd={() => setDragging(null)}
-                          onDragOver={(e)=>e.preventDefault()}
-                          onDrop={()=>{
-                            const src = dragCol.current
-                            const dest = header.column.id
-                            if (!src || src===dest) return
-                            const order = table.getState().columnOrder.length ? [...table.getState().columnOrder] : table.getAllLeafColumns().map(c=>c.id)
-                            const srcIdx = order.indexOf(src)
-                            const destIdx = order.indexOf(dest)
-                            order.splice(destIdx, 0, ...order.splice(srcIdx, 1))
-                            setColumnOrder(order)
-                            setDragging(null)
-                          }}
-                        >
-                          {header.isPlaceholder ? null : (
-                            <div className="flex items-center gap-2">
-                              <button 
-                                onClick={header.column.getToggleSortingHandler()} 
-                                className="flex items-center gap-2 hover:text-blue-600 transition-colors duration-200"
-                              >
-                                {flexRender(header.column.columnDef.header, header.getContext())}
-                                <span className="sort-indicator">
-                                  {{ asc: '▲', desc: '▼' }[header.column.getIsSorted()] ?? ''}
-                                </span>
-                              </button>
-                              {header.column.getCanResize() && (
-                                <div
-                                  onMouseDown={header.getResizeHandler()}
-                                  onTouchStart={header.getResizeHandler()}
-                                  className="resize-handle"
-                                />
-                              )}
-                            </div>
-                          )}
-                        </th>
-                      ))}
-                    </tr>
-                  ))}
-                </thead>
-
-                <tbody 
-                  className="virtual-table-container"
-                  style={{ height: `${rowVirtualizer.getTotalSize()}px`, position: 'relative' }}
-                >
-                  {loading ? (
-                    <div className="p-8 text-center">
-                      <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                      <p className="mt-2 text-sm text-gray-500">Loading page {pagination.pageIndex + 1}...</p>
-                    </div>
-                    ) : (
-                      rowVirtualizer.getVirtualItems().map(virtualRow => {
-                        const row = table.getRowModel().rows[virtualRow.index]
-                        const isSelected = row.getIsSelected()
-                        return (
-                        <tr
-                          key={row.id}
-                          className={cls(
-                            'table-row absolute left-0 right-0',
-                            isSelected && 'selected',
-                            virtualRow.index % 2 === 0 && 'bg-white'
-                          )}
-                          style={{ transform: `translateY(${virtualRow.start}px)` }}
-                        >
+          <div className="overflow-x-auto">
+            <table className="min-w-full">
+              <thead className="table-header">
+                {table.getHeaderGroups().map(headerGroup => (
+                  <tr key={headerGroup.id}>
+                    {headerGroup.headers.map(header => (
+                      <th
+                        key={header.id}
+                        style={{ width: header.getSize() }}
+                        className={cls(
+                          'table-header-cell',
+                          header.column.id === dragging && 'dragging'
+                        )}
+                        draggable
+                        onDragStart={()=>{ 
+                          dragCol.current = header.column.id
+                          setDragging(header.column.id)
+                        }}
+                        onDragEnd={() => setDragging(null)}
+                        onDragOver={(e)=>e.preventDefault()}
+                        onDrop={()=>{
+                          const src = dragCol.current
+                          const dest = header.column.id
+                          if (!src || src===dest) return
+                          const order = table.getState().columnOrder.length ? [...table.getState().columnOrder] : table.getAllLeafColumns().map(c=>c.id)
+                          const srcIdx = order.indexOf(src)
+                          const destIdx = order.indexOf(dest)
+                          order.splice(destIdx, 0, ...order.splice(srcIdx, 1))
+                          setColumnOrder(order)
+                          setDragging(null)
+                        }}
+                      >
+                        {header.isPlaceholder ? null : (
+                          <div className="flex items-center gap-2">
+                            <button 
+                              onClick={header.column.getToggleSortingHandler()} 
+                              className="flex items-center gap-2 hover:text-blue-600 transition-colors duration-200"
+                            >
+                              {flexRender(header.column.columnDef.header, header.getContext())}
+                              <span className="sort-indicator">{renderSortIndicator(header)}</span>
+                            </button>
+                            {header.column.getCanResize() && (
+                              <div
+                                onMouseDown={header.getResizeHandler()}
+                                onTouchStart={header.getResizeHandler()}
+                                className="resize-handle"
+                              />
+                            )}
+                          </div>
+                        )}
+                      </th>
+                    ))}
+                  </tr>
+                ))}
+              </thead>
+              <tbody 
+                className="virtual-table-container"
+                style={{ height: `${rowVirtualizer.getTotalSize()}px`, position: 'relative' }}
+              >
+                {loading ? (
+                  <tr>
+                    <td colSpan={table.getAllLeafColumns().length}>
+                      <div className="p-8 text-center">
+                        <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                        <p className="mt-2 text-sm text-gray-500">Loading page {pagination.pageIndex + 1}...</p>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  rowVirtualizer.getVirtualItems().map(virtualRow => {
+                    const row = table.getRowModel().rows[virtualRow.index]
+                    const isSelected = row.getIsSelected()
+                    return (
+                      <tr
+                        key={row.id}
+                        className={cls(
+                          'table-row absolute left-0 right-0',
+                          isSelected && 'selected',
+                          virtualRow.index % 2 === 0 && 'bg-white'
+                        )}
+                        style={{ transform: `translateY(${virtualRow.start}px)` }}
+                      >
                         {row.getVisibleCells().map(cell => (
                           <td 
                             key={cell.id} 
@@ -452,26 +513,21 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, s
                           </td>
                         ))}
                       </tr>
-                        )
-                      })
-
                     )
-                  }
-                 
-                </tbody>
-              </table>
-            </div>
-          
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 
-      {/* Pagination */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mt-4 animate-slide-in">
         <div className="text-xs sm:text-sm text-gray-600">
           <span className="font-medium">{total.toLocaleString()}</span> {entityName.toLowerCase()}
           {selectedCount > 0 && (
             <span className="ml-2 text-blue-600 font-medium">
-              • {selectedCount} selected
+              - {selectedCount} selected
             </span>
           )}
         </div>
@@ -481,20 +537,20 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, s
             onClick={()=>setPagination(p=>({...p, pageIndex: Math.max(0, p.pageIndex-1)}))}
             disabled={pagination.pageIndex===0 || loading}
           >
-            <span className="hidden sm:inline">← Previous</span>
-            <span className="sm:hidden">← Prev</span>
+            <span className="hidden sm:inline">{'<- Previous'}</span>
+            <span className="sm:hidden">{'<- Prev'}</span>
           </button>
           <span className="text-xs sm:text-sm font-medium text-gray-700 whitespace-nowrap">
-            <span className="hidden sm:inline">Page {pagination.pageIndex+1} of {pageCount || 1}</span>
-            <span className="sm:hidden">{pagination.pageIndex+1}/{pageCount || 1}</span>
+            <span className="hidden sm:inline">Page {pagination.pageIndex+1} of {pageCount}</span>
+            <span className="sm:hidden">{pagination.pageIndex+1}/{pageCount}</span>
           </span>
           <button
             className="pagination-button"
             onClick={()=>setPagination(p=>({...p, pageIndex: Math.min((pageCount-1), p.pageIndex+1)}))}
             disabled={pagination.pageIndex+1>=pageCount || loading}
           >
-            <span className="hidden sm:inline">Next →</span>
-            <span className="sm:hidden">Next →</span>
+            <span className="hidden sm:inline">{'Next ->'}</span>
+            <span className="sm:hidden">{'Next ->'}</span>
           </button>
           <select
             className="pagination-select"
@@ -509,4 +565,12 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, s
     </div>
   )
 }
+
+
+
+
+
+
+
+
 
