@@ -101,5 +101,76 @@ res.json({ deleted: ids.length });
 });
 
 
+// Views API
+const CURRENT_USER_ID = 1;
+app.get('/api/views', (req, res) => {
+    const resource = req.query.resource;
+    if (!resource) return res.status(400).json({ error: 'resource required' });
+  
+    const rows = db.prepare(`
+      SELECT id, name, resource, state, visibility, created_at, updated_at
+      FROM views
+      WHERE user_id=@uid AND resource=@resource
+      ORDER BY name ASC
+    `).all({ uid: CURRENT_USER_ID, resource });
+  
+    res.json(rows.map(r => ({ ...r, state: JSON.parse(r.state) })));
+  });
+
+// Create view
+app.post('/api/views', (req, res) => {
+    const { name, resource, state, visibility = 'private', is_default = 0 } = req.body || {};
+    if (!name || !resource || !state) return res.status(400).json({ error: 'name, resource, state required' });
+  
+    const stmt = db.prepare(`
+      INSERT INTO views (user_id, resource, name, state, visibility)
+      VALUES (@uid, @resource, @name, @state, @visibility)
+    `);
+  
+    try {
+      const info = stmt.run({
+        uid: CURRENT_USER_ID,
+        resource,
+        name,
+        state: JSON.stringify(state),
+        visibility,
+        is_default: is_default ? 1 : 0
+      });
+  
+      const view = db.prepare(`SELECT * FROM views WHERE id=?`).get(info.lastInsertRowid);
+      res.status(201).json({ ...view, state: JSON.parse(view.state) });
+    } catch (e) {
+      if (String(e.message).includes('UNIQUE')) {
+        return res.status(409).json({ error: 'view name already exists' });
+      }
+      throw e;
+    }
+  });
+
+
+  // Update view (rename or change state)
+app.patch('/api/views/:id', (req, res) => {
+    const id = +req.params.id;
+    const updates = [];
+    const params = { id, uid: CURRENT_USER_ID };
+  
+    if ('name' in req.body) { updates.push('name=@name'); params.name = req.body.name; }
+    if ('state' in req.body) { updates.push('state=@state'); params.state = JSON.stringify(req.body.state); }
+    if ('visibility' in req.body) { updates.push('visibility=@visibility'); params.visibility = req.body.visibility; }
+    
+    if (!updates.length) return res.status(400).json({ error: 'no fields to update' });
+  
+    db.prepare(`UPDATE views SET ${updates.join(', ')}, updated_at=datetime('now') WHERE id=@id AND user_id=@uid`).run(params);
+    const view = db.prepare(`SELECT * FROM views WHERE id=@id AND user_id=@uid`).get(params);
+    if (!view) return res.status(404).json({ error: 'not found' });
+    res.json({ ...view, state: JSON.parse(view.state) });
+  });
+  
+  app.delete('/api/views/:id', (req, res) => {
+    const id = +req.params.id;
+    const info = db.prepare(`DELETE FROM views WHERE id=@id AND user_id=@uid`).run({ id, uid: CURRENT_USER_ID });
+    res.json({ deleted: info.changes });
+  });
+
 const PORT = process.env.PORT || 5174;
 app.listen(PORT, () => console.log(`CRM API on http://localhost:${PORT}`));

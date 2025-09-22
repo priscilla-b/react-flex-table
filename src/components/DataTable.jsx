@@ -10,8 +10,11 @@ import cls from 'classnames'
 import debounce from 'lodash.debounce'
 import Toolbar from './Toolbar'
 import ColumnVisibilityMenu from './ColumnVisibilityMenu'
+import SavedViews from './SavedViews'
+import { fetchViews, createView, updateView, deleteViewServer } from '../lib/dataFetcher'
 
 const columnHelper = createColumnHelper()
+const RESOURCE = 'leads';
 
 function EditableCell({ getValue, row, column, table }) {
   const initial = getValue()
@@ -77,6 +80,8 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, s
   const [columnOrder, setColumnOrder] = useState([])
   const [columnVisibility, setColumnVisibility] = useState({})
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 25 })
+  const [views, setViews] = useState([])
+  const [viewLoading, setViewLoading] = useState(false);
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
   const [dragging, setDragging] = useState(null)
@@ -187,6 +192,62 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, s
 
   const pageCount = Math.ceil(total / pagination.pageSize)
 
+  // Saved views
+
+  // load views from server
+  useEffect(() => {
+    (async () => {
+      setViewLoading(true);
+      try {
+        const res = await fetchViews(RESOURCE);
+        setViews(res);
+      } finally { setViewLoading(false); }
+    })();
+  }, []);
+   
+  function currentStateSnapshot() {
+    return { sorting, columnFilters, columnOrder, columnVisibility, pagination };
+  }
+
+  function applyViewState(st) {
+    setSorting(st.sorting ?? []);
+    setColumnFilters(st.columnFilters ?? []);
+    setColumnOrder(st.columnOrder ?? []);
+    setColumnVisibility(st.columnVisibility ?? {});
+    setPagination(st.pagination ?? { pageIndex: 0, pageSize: 25 });
+  }
+
+  async function saveCurrentView(name, { visibility='private', isDefault=false } = {}) {
+    const state = currentStateSnapshot();
+    const created = await createView(RESOURCE, name, state, visibility, isDefault);
+    setViews(v => [...v.filter(x => x.id !== created.id), created].sort((a,b)=>a.name.localeCompare(b.name)));
+  }
+
+  async function loadViewById(id) {
+    const v = views.find(x => x.id === id);
+    if (!v) return;
+    applyViewState(v.state);
+  }
+
+  async function deleteViewById(id) {
+    await deleteViewServer(id);
+    setViews(v => v.filter(x => x.id !== id));
+  }
+
+  async function editViewMeta(id, { name, visibility }) {
+    const patch = {}
+    if (name) patch.name = name
+    if (visibility) patch.visibility = visibility
+    const updated = await updateView(id, patch)
+    setViews(v => v.map(x => x.id === id ? updated : x).sort((a,b)=>a.name.localeCompare(b.name)))
+  }
+
+  async function saveCurrentStateToView(id) {
+    const state = currentStateSnapshot()
+    const updated = await updateView(id, { state })
+    setViews(v => v.map(x => x.id === id ? updated : x))
+  }
+
   return (
     <div className="animate-fade-in">
       <Toolbar
@@ -240,6 +301,14 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, s
         selectedCount={selectedCount}
       >
         <ColumnVisibilityMenu table={table} />
+        <SavedViews 
+          views={views}
+          onSave={saveCurrentView}
+          onLoad={loadViewById}
+          onDelete={deleteViewById}
+          onEditMeta={editViewMeta}
+          onSaveState={saveCurrentStateToView}
+        />
       </Toolbar>
 
       <div className="table-container">

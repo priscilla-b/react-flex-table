@@ -47,3 +47,36 @@ export async function bulkDeleteLeads(ids) {
   if (!res.ok) throw new Error('Bulk delete failed');
   return res.json();
 }
+
+// Views API
+export async function fetchViews(resource) {
+  const res = await fetch(`${API}/views?resource=${encodeURIComponent(resource)}`);
+  if (!res.ok) throw new Error('List views failed');
+  return res.json();
+}
+
+export async function createView(resource, name, state, visibility = 'private', isDefault = false) {
+  const res = await fetch(`${API}/views`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ resource, name, state, visibility, is_default: isDefault })
+  });
+  if (!res.ok) throw new Error('Create view failed');
+  return res.json();
+}
+
+export async function updateView(id, patch) {
+  const res = await fetch(`${API}/views/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch)
+  });
+  if (!res.ok) throw new Error('Update view failed');
+  return res.json();
+}
+
+export async function deleteViewServer(id) {
+  const res = await fetch(`${API}/views/${id}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error('Delete view failed');
+  return res.json();
+}

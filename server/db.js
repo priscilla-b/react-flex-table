@@ -20,10 +20,38 @@ next_action_date TEXT, -- ISO string (YYYY-MM-DD)
 created_at TEXT DEFAULT (datetime('now')),
 tags TEXT -- JSON array of strings
 );
+
+CREATE TABLE IF NOT EXISTS users (
+  id INTEGER PRIMARY KEY,
+  email TEXT UNIQUE
+);
+
+
+CREATE TABLE IF NOT EXISTS views (
+  id INTEGER PRIMARY KEY,
+  user_id INTEGER NOT NULL,
+  resource TEXT NOT NULL,             
+  name TEXT NOT NULL,
+  state TEXT NOT NULL,                
+  visibility TEXT NOT NULL DEFAULT 'private' CHECK (visibility IN ('private','team','org')),
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now')),
+  FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+-- Make name unique per user/resource for easy reference
+CREATE UNIQUE INDEX IF NOT EXISTS idx_views_user_resource_name
+  ON views (user_id, resource, name);
 `);
 
 
 // Seed when empty
+// Ensure a default user exists
+const userCount = db.prepare('SELECT COUNT(*) as c FROM users').get().c;
+if (userCount === 0) {
+  db.prepare('INSERT INTO users (email) VALUES (?)').run('demo@example.com');
+}
+
 const count = db.prepare('SELECT COUNT(*) as c FROM leads').get().c;
 if (count === 0) {
 const countries = ['Ghana','Kenya','Nigeria','Rwanda','Morocco','South Africa','Egypt'];
