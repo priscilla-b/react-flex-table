@@ -245,3 +245,11 @@
     @apply text-xs px-2 py-1;
   }
 }
+.filter-label {
+  @apply block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1;
+}
+
+.filter-input {
+  @apply w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200;
+}
+

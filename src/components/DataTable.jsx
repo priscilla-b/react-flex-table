@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   flexRender,
   getCoreRowModel,
@@ -11,6 +11,7 @@ import debounce from 'lodash.debounce'
 import Toolbar from './Toolbar'
 import ColumnVisibilityMenu from './ColumnVisibilityMenu'
 import SavedViews from './SavedViews'
+import Filters from './Filters'
 import { fetchViews, createView, updateView, deleteViewServer } from '../lib/dataFetcher'
 
 const columnHelper = createColumnHelper()
@@ -87,6 +88,42 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, s
   const [dragging, setDragging] = useState(null)
   const [refreshTrigger, setRefreshTrigger] = useState(0)
 
+  const filterOptions = useMemo(() => {
+    const getOptions = (key) => {
+      const column = userColumns.find(col => col.accessorKey === key)
+      return Array.isArray(column?.editor?.options) ? column.editor.options : []
+    }
+    return {
+      stage: getOptions('stage'),
+      source: getOptions('source'),
+      owner: getOptions('owner'),
+    }
+  }, [userColumns])
+
+  const activeFilters = useMemo(
+    () => Object.fromEntries(columnFilters.map(f => [f.id, f.value])),
+    [columnFilters]
+  )
+
+  const updateColumnFilters = useCallback((updater) => {
+    setColumnFilters(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : updater
+      return next
+    })
+    setPagination(prev => ({ ...prev, pageIndex: 0 }))
+  }, [])
+
+  const applyFilterObject = useCallback((filtersObj) => {
+    const next = Object.entries(filtersObj || {})
+      .filter(([, value]) => value !== '' && value !== null && value !== undefined)
+      .map(([id, value]) => ({ id, value }))
+    updateColumnFilters(next)
+  }, [updateColumnFilters])
+
+  const clearFilters = useCallback(() => {
+    updateColumnFilters([])
+  }, [updateColumnFilters])
+
   const dragCol = useRef(null)
 
   const columns = useMemo(()=>{
@@ -126,7 +163,7 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, s
     columns,
     state: { sorting, columnFilters, columnOrder, columnVisibility, rowSelection, pagination },
     onSortingChange: setSorting,
-    onColumnFiltersChange: setColumnFilters,
+    onColumnFiltersChange: updateColumnFilters,
     onColumnOrderChange: setColumnOrder,
     onColumnVisibilityChange: setColumnVisibility,
     onRowSelectionChange: setRowSelection,
@@ -301,6 +338,12 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, s
         selectedCount={selectedCount}
       >
         <ColumnVisibilityMenu table={table} />
+        <Filters
+          filters={activeFilters}
+          onApply={applyFilterObject}
+          onClear={clearFilters}
+          options={filterOptions}
+        />
         <SavedViews 
           views={views}
           onSave={saveCurrentView}
@@ -466,3 +509,4 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, s
     </div>
   )
 }
+
