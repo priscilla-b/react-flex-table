@@ -1,3 +1,4 @@
+/* eslint-env node */
 import express from 'express'
 import cors from 'cors'
 import db from './db.js'
@@ -19,6 +20,24 @@ const ALLOWED_SORT = new Set([
   'next_action_date',
   'created_at'
 ])
+
+const EDITABLE_COLUMNS = new Set([
+  'company_name',
+  'contact_name',
+  'email',
+  'phone',
+  'country',
+  'stage',
+  'source',
+  'owner',
+  'annual_revenue',
+  'next_action_date'
+])
+
+const STAGES = ['Prospect','Qualified','Proposal','Won','Lost']
+const SOURCES = ['Referral','Ads','Events','Outbound','Organic']
+const NOT_NULL_COLUMNS = new Set(['company_name','contact_name','email','stage','source','owner'])
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
 
 const FIELD_METADATA = {
   company: { column: 'company_name', type: 'text' },
@@ -129,6 +148,89 @@ function applySimpleFilters(where, params, filters = {}) {
   if (simple.createdTo) { where.push('date(created_at) <= date(@createdTo)'); params.createdTo = simple.createdTo }
   if (simple.nextBefore) { where.push('date(next_action_date) <= date(@nextBefore)'); params.nextBefore = simple.nextBefore }
   if (simple.nextAfter) { where.push('date(next_action_date) >= date(@nextAfter)'); params.nextAfter = simple.nextAfter }
+}
+
+function coerceBulkEditValue(column, raw) {
+  let value = raw
+  if (value === undefined) value = null
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    value = trimmed === '' ? null : trimmed
+  }
+
+  if (column === 'annual_revenue') {
+    if (value === null) return { ok: true, value: null }
+    const numeric = Number(value)
+    if (!Number.isFinite(numeric)) {
+      return { ok: false, error: 'Enter a valid number.' }
+    }
+    return { ok: true, value: numeric }
+  }
+
+  if (column === 'next_action_date') {
+    if (value === null) return { ok: true, value: null }
+    const asString = String(value)
+    if (!DATE_PATTERN.test(asString)) {
+      return { ok: false, error: 'Provide a date in YYYY-MM-DD format.' }
+    }
+    return { ok: true, value: asString }
+  }
+
+  if (column === 'stage') {
+    if (value === null) {
+      return { ok: false, error: 'Stage cannot be empty.' }
+    }
+    const normalized = String(value).trim()
+    if (!STAGES.includes(normalized)) {
+      return { ok: false, error: 'Invalid stage selection.' }
+    }
+    return { ok: true, value: normalized }
+  }
+
+  if (column === 'source') {
+    if (value === null) {
+      return { ok: false, error: 'Source cannot be empty.' }
+    }
+    const normalized = String(value).trim()
+    if (!SOURCES.includes(normalized)) {
+      return { ok: false, error: 'Invalid source selection.' }
+    }
+    return { ok: true, value: normalized }
+  }
+
+  if (NOT_NULL_COLUMNS.has(column)) {
+    if (value === null) {
+      return { ok: false, error: 'This field is required.' }
+    }
+    const normalized = String(value).trim()
+    if (!normalized) {
+      return { ok: false, error: 'This field is required.' }
+    }
+    return { ok: true, value: normalized }
+  }
+
+  if (value === null) {
+    return { ok: true, value: null }
+  }
+
+  return { ok: true, value: String(value).trim() || null }
+}
+
+function formatDuplicateName(base, { prefix = '', suffix = '', index = 0, copies = 1 } = {}) {
+  const trimmedBase = (base ?? '').toString().trim() || 'Untitled Lead'
+  const pref = prefix ? prefix.toString().trim() : ''
+  const suff = suffix ? suffix.toString() : ''
+  let name = trimmedBase
+  if (pref) {
+    name = `${pref} ${name}`.trim()
+  }
+  if (suff) {
+    name = `${name}${suff}`
+  }
+  if (copies > 1) {
+    name = `${name} ${index + 1}`.trim()
+  }
+  return name
 }
 
 function buildAdvancedCondition(condition, index) {
@@ -340,6 +442,92 @@ app.post('/api/leads/bulk-delete', (req, res) => {
   res.json({ deleted: ids.length })
 })
 
+app.post('/api/leads/bulk-edit', (req, res) => {
+  const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(Number).filter(Boolean) : []
+  const column = req.body?.column
+
+  if (ids.length === 0) return res.status(400).json({ error: 'ids required' })
+  if (!column || !EDITABLE_COLUMNS.has(column)) {
+    return res.status(400).json({ error: 'Unsupported column for bulk edit.' })
+  }
+
+  const result = coerceBulkEditValue(column, req.body?.value)
+  if (!result.ok) {
+    return res.status(400).json({ error: result.error })
+  }
+
+  const placeholders = ids.map(() => '?').join(',')
+  try {
+    const stmt = db.prepare(`UPDATE leads SET ${column} = ? WHERE id IN (${placeholders})`)
+    const info = stmt.run(result.value, ...ids)
+    res.json({ updated: info.changes })
+  } catch (error) {
+    console.error('Bulk edit failed', error)
+    res.status(500).json({ error: 'Bulk edit failed' })
+  }
+})
+
+app.post('/api/leads/bulk-duplicate', (req, res) => {
+  const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(Number).filter(Boolean) : []
+  if (ids.length === 0) return res.status(400).json({ error: 'ids required' })
+
+  let copies = Number(req.body?.copies ?? 1)
+  if (!Number.isInteger(copies) || copies < 1) {
+    return res.status(400).json({ error: 'Copies must be a positive integer.' })
+  }
+  copies = Math.min(copies, 25)
+
+  const prefix = typeof req.body?.prefix === 'string' ? req.body.prefix : ''
+  const suffix = typeof req.body?.suffix === 'string' ? req.body.suffix : ''
+
+  const placeholders = ids.map(() => '?').join(',')
+  const records = db.prepare(`SELECT * FROM leads WHERE id IN (${placeholders})`).all(ids)
+  if (records.length === 0) {
+    return res.status(404).json({ error: 'No leads found for the provided ids.' })
+  }
+
+  const insertStmt = db.prepare(`
+    INSERT INTO leads (
+      company_name, contact_name, email, phone, country, stage, source, owner, annual_revenue, next_action_date, created_at, tags
+    ) VALUES (
+      @company_name, @contact_name, @email, @phone, @country, @stage, @source, @owner, @annual_revenue, @next_action_date, @created_at, @tags
+    )
+  `)
+
+  const duplicateTransaction = db.transaction(() => {
+    const createdIds = []
+    records.forEach(record => {
+      for (let index = 0; index < copies; index += 1) {
+        const payload = {
+          company_name: formatDuplicateName(record.company_name, { prefix, suffix, index, copies }),
+          contact_name: record.contact_name,
+          email: record.email,
+          phone: record.phone,
+          country: record.country,
+          stage: record.stage,
+          source: record.source,
+          owner: record.owner,
+          annual_revenue: record.annual_revenue,
+          next_action_date: record.next_action_date,
+          created_at: new Date().toISOString(),
+          tags: record.tags,
+        }
+        const info = insertStmt.run(payload)
+        createdIds.push(info.lastInsertRowid)
+      }
+    })
+    return createdIds
+  })
+
+  try {
+    const idsCreated = duplicateTransaction()
+    res.json({ duplicated: idsCreated.length, ids: idsCreated })
+  } catch (error) {
+    console.error('Bulk duplicate failed', error)
+    res.status(500).json({ error: 'Bulk duplicate failed' })
+  }
+})
+
 const CURRENT_USER_ID = 1
 app.get('/api/views', (req, res) => {
   const resource = req.query.resource
@@ -407,5 +595,6 @@ app.delete('/api/views/:id', (req, res) => {
   res.json({ deleted: info.changes })
 })
 
-const PORT = process.env.PORT || 5174
+const PORT = globalThis.process?.env?.PORT || 5174
 app.listen(PORT, () => console.log(`CRM API on http://localhost:${PORT}`))
+

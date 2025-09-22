@@ -1,6 +1,6 @@
-import React, { useMemo, useState } from 'react'
+import React, { useMemo } from 'react'
 import DataTable from './components/DataTable'
-import { fetchLeads, patchLead, bulkDeleteLeads, createLead } from './lib/dataFetcher'
+import { fetchLeads, patchLead, bulkDeleteLeads, bulkEditLeads, bulkDuplicateLeads, createLead } from './lib/dataFetcher'
 
 // TODO: Fetch from server
 const STAGES = ['Prospect','Qualified','Proposal','Won','Lost']
@@ -10,14 +10,14 @@ const OWNERS = ['Teammate A','Teammate B', 'Teammate C']
 export default function App() {
   const columns = useMemo(() => [
     { accessorKey: 'id', header: 'ID', size: 64 },
-    { accessorKey: 'company_name', header: 'Company', size: 220, editable: true },
-    { accessorKey: 'contact_name', header: 'Contact', size: 200, editable: true },
-    { accessorKey: 'email', header: 'Email', size: 260, editable: true },
+    { accessorKey: 'company_name', header: 'Company', size: 220, editable: true, required: true },
+    { accessorKey: 'contact_name', header: 'Contact', size: 200, editable: true, required: true },
+    { accessorKey: 'email', header: 'Email', size: 260, editable: true, required: true },
     { accessorKey: 'phone', header: 'Phone', size: 160, editable: true },
     { accessorKey: 'country', header: 'Country', size: 140, editable: true },
-    { accessorKey: 'stage', header: 'Stage', size: 140, editable: true, editor: { type: 'select', options: STAGES } },
-    { accessorKey: 'source', header: 'Source', size: 140, editable: true, editor: { type: 'select', options: SOURCES } },
-    { accessorKey: 'owner', header: 'Owner', size: 140, editable: true, editor: { type: 'select', options: OWNERS } },
+    { accessorKey: 'stage', header: 'Stage', size: 140, editable: true, required: true, editor: { type: 'select', options: STAGES, allowNull: false } },
+    { accessorKey: 'source', header: 'Source', size: 140, editable: true, required: true, editor: { type: 'select', options: SOURCES, allowNull: false } },
+    { accessorKey: 'owner', header: 'Owner', size: 140, editable: true, required: true, editor: { type: 'select', options: OWNERS, allowNull: false } },
     { accessorKey: 'annual_revenue', header: 'Annual Revenue', size: 160, editable: true, editor: { type: 'number' }, cellFormat: 'currency' },
     { accessorKey: 'next_action_date', header: 'Next Action', size: 160, editable: true, editor: { type: 'date' } },
     { accessorKey: 'created_at', header: 'Created', size: 180 },
@@ -48,11 +48,12 @@ export default function App() {
               columns={columns}
               fetcher={fetchLeads}
               entityName="Leads"
-              storageKey="crm_leads_table"
               onCreate={createLead}
               onBulkDelete={bulkDeleteLeads}
+              onBulkEdit={bulkEditLeads}
+              onBulkDuplicate={bulkDuplicateLeads}
               onPatch={patchLead}
-              />
+            />
           </div>
         </div>
       </main>

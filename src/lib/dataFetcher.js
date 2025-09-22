@@ -48,6 +48,33 @@ export async function bulkDeleteLeads(ids) {
   return res.json();
 }
 
+export async function bulkEditLeads(ids, column, value) {
+  const res = await fetch(`${API}/leads/bulk-edit`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ids, column, value })
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}));
+    throw new Error(error.error || 'Bulk edit failed');
+  }
+  return res.json();
+}
+
+export async function bulkDuplicateLeads(ids, options = {}) {
+  const payload = { ids, ...options };
+  const res = await fetch(`${API}/leads/bulk-duplicate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}));
+    throw new Error(error.error || 'Bulk duplicate failed');
+  }
+  return res.json();
+}
+
 // Views API
 export async function fetchViews(resource) {
   const res = await fetch(`${API}/views?resource=${encodeURIComponent(resource)}`);

@@ -3,7 +3,6 @@ import {
   flexRender,
   getCoreRowModel,
   useReactTable,
-  createColumnHelper,
 } from '@tanstack/react-table'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import cls from 'classnames'
@@ -11,10 +10,11 @@ import debounce from 'lodash.debounce'
 import Toolbar from './Toolbar'
 import ColumnVisibilityMenu from './ColumnVisibilityMenu'
 import SavedViews from './SavedViews'
+import BulkEditDialog from './BulkEditDialog'
+import BulkDuplicateDialog from './BulkDuplicateDialog'
 import Filters, { createDefaultFilterState, sanitizeFilterState } from './Filters'
 import { fetchViews, createView, updateView, deleteViewServer } from '../lib/dataFetcher'
 
-const columnHelper = createColumnHelper()
 const RESOURCE = 'leads'
 const FILTER_COLUMN_ID = '__filters__'
 
@@ -115,7 +115,7 @@ function EditableCell({ getValue, row, column, table }) {
   )
 }
 
-export default function DataTable({ columns: userColumns, fetcher, entityName, storageKey, onCreate, onBulkDelete, onPatch }) {
+export default function DataTable({ columns: userColumns, fetcher, entityName, onCreate, onBulkDelete, onBulkEdit, onBulkDuplicate, onBulkUpload, onPatch }) {
   const [data, setData] = useState([])
   const [rowSelection, setRowSelection] = useState({})
   const [sorting, setSorting] = useState([])
@@ -129,6 +129,10 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, s
   const [loading, setLoading] = useState(false)
   const [dragging, setDragging] = useState(null)
   const [refreshTrigger, setRefreshTrigger] = useState(0)
+  const [bulkEditOpen, setBulkEditOpen] = useState(false)
+  const [bulkDuplicateOpen, setBulkDuplicateOpen] = useState(false)
+  const [bulkEditLoading, setBulkEditLoading] = useState(false)
+  const [bulkDuplicateLoading, setBulkDuplicateLoading] = useState(false)
 
   const dragCol = useRef(null)
   const parentRef = useRef(null)
@@ -298,7 +302,11 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, s
     return ()=>{ active = false }
   }, [fetcher, pagination.pageIndex, pagination.pageSize, sorting, filterState, refreshTrigger])
 
-  const selectedCount = Object.keys(rowSelection).length
+  const selectedRowModel = table.getSelectedRowModel()
+  const selectedFlatRows = selectedRowModel.flatRows
+  const selectedIds = selectedFlatRows.map(row => row.original?.id).filter(Boolean)
+  const selectedCount = selectedFlatRows.length
+  const hasSelection = selectedCount > 0
   const pageCount = Math.max(1, Math.ceil(total / pagination.pageSize))
 
   function currentStateSnapshot() {
@@ -346,6 +354,38 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, s
     setViews(v => v.map(x => x.id === id ? updated : x))
   }
 
+  async function handleBulkEditConfirm(columnId, value) {
+    if (!onBulkEdit) return
+    if (!columnId || !selectedIds.length) return
+    setBulkEditLoading(true)
+    try {
+      await onBulkEdit(selectedIds, columnId, value)
+      setBulkEditOpen(false)
+      setRowSelection({})
+      setRefreshTrigger(prev => prev + 1)
+    } catch (error) {
+      console.error('Failed to bulk edit records:', error)
+    } finally {
+      setBulkEditLoading(false)
+    }
+  }
+
+  async function handleBulkDuplicateConfirm(options = {}) {
+    if (!onBulkDuplicate) return
+    if (!selectedIds.length) return
+    setBulkDuplicateLoading(true)
+    try {
+      await onBulkDuplicate(selectedIds, options)
+      setBulkDuplicateOpen(false)
+      setRowSelection({})
+      setRefreshTrigger(prev => prev + 1)
+    } catch (error) {
+      console.error('Failed to duplicate records:', error)
+    } finally {
+      setBulkDuplicateLoading(false)
+    }
+  }
+
   const renderSortIndicator = (header) => {
     const sortState = header.column.getIsSorted()
     if (!sortState) return ''
@@ -380,22 +420,18 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, s
           }
         }}
         onDeleteSelected={async () => {
-          const selectedIds = Object.keys(rowSelection)
-            .map(idx => table.getRowModel().rows[Number(idx)]?.original?.id)
-            .filter(Boolean)
-          
-          if (selectedIds.length === 0) return
-          
-          if (onBulkDelete) {
-            try {
-              await onBulkDelete(selectedIds)
-              setRowSelection({})
-              setRefreshTrigger(prev => prev + 1)
-            } catch (error) {
-              console.error('Failed to delete records:', error)
-            }
+          if (!onBulkDelete || !selectedIds.length) return
+          try {
+            await onBulkDelete(selectedIds)
+            setRowSelection({})
+            setRefreshTrigger(prev => prev + 1)
+          } catch (error) {
+            console.error('Failed to delete records:', error)
           }
         }}
+        onBulkEdit={onBulkEdit ? () => { if (!hasSelection) return; setBulkEditOpen(true) } : undefined}
+        onBulkDuplicate={onBulkDuplicate ? () => { if (!hasSelection) return; setBulkDuplicateOpen(true) } : undefined}
+        onBulkUpload={typeof onBulkUpload === 'function' ? onBulkUpload : undefined}
         selectedCount={selectedCount}
       >
         <ColumnVisibilityMenu table={table} />
@@ -415,6 +451,26 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, s
           loading={viewLoading}
         />
       </Toolbar>
+
+      {onBulkEdit && (
+        <BulkEditDialog
+          open={bulkEditOpen}
+          onClose={() => { if (!bulkEditLoading) setBulkEditOpen(false) }}
+          columns={userColumns}
+          selectionCount={selectedCount}
+          loading={bulkEditLoading}
+          onConfirm={handleBulkEditConfirm}
+        />
+      )}
+      {onBulkDuplicate && (
+        <BulkDuplicateDialog
+          open={bulkDuplicateOpen}
+          onClose={() => { if (!bulkDuplicateLoading) setBulkDuplicateOpen(false) }}
+          selectionCount={selectedCount}
+          loading={bulkDuplicateLoading}
+          onConfirm={handleBulkDuplicateConfirm}
+        />
+      )}
 
       <div className="table-container">
         <div ref={parentRef} className="max-h-[520px] overflow-auto custom-scrollbar border-t border-gray-200">
@@ -565,6 +621,18 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, s
     </div>
   )
 }
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
