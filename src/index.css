@@ -253,3 +253,36 @@
   @apply w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200;
 }
 
+
+
+.table-cell {
+  vertical-align: top;
+}
+
+.cell-truncate {
+  position: relative;
+  display: block;
+  max-width: var(--cell-max-w, 100%);
+}
+
+.cell-truncate-inner {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.table-cell:hover .cell-truncate,
+.table-cell:focus-within .cell-truncate {
+  max-width: none;
+}
+
+.table-cell:hover .cell-truncate-inner,
+.table-cell:focus-within .cell-truncate-inner {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  min-width: max(100%, max-content);
+  max-width: none;
+}

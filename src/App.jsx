@@ -20,6 +20,7 @@ export default function App() {
     { accessorKey: 'owner', header: 'Owner', size: 140, editable: true, required: true, editor: { type: 'select', options: OWNERS, allowNull: false } },
     { accessorKey: 'annual_revenue', header: 'Annual Revenue', size: 160, editable: true, editor: { type: 'number' }, cellFormat: 'currency' },
     { accessorKey: 'next_action_date', header: 'Next Action', size: 160, editable: true, editor: { type: 'date' } },
+    { accessorKey: 'notes', header: 'Notes', size: 320, editable: true },
     { accessorKey: 'created_at', header: 'Created', size: 180 },
   ], [])
 

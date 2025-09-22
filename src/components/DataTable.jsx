@@ -104,9 +104,11 @@ function EditableCell({ getValue, row, column, table }) {
           autoFocus
         />
       ) : (
-        <span className="block group-hover:text-blue-600 transition-colors duration-200">
-          {String(value ?? '')}
-        </span>
+        <div className="cell-truncate">
+          <span className="cell-truncate-inner block group-hover:text-blue-600 transition-colors duration-200">
+            {String(value ?? '')}
+          </span>
+        </div>
       )}
       {!editing && (
         <div className="absolute inset-0 bg-blue-50 opacity-0 group-hover:opacity-20 transition-opacity duration-200 pointer-events-none rounded" />
@@ -409,6 +411,7 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, o
                 owner: 'Teammate A',
                 annual_revenue: 0,
                 next_action_date: new Date().toISOString().split('T')[0],
+                notes: '',
                 created_at: new Date().toISOString(),
                 tags: JSON.stringify([])
               }
@@ -475,14 +478,14 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, o
       <div className="table-container">
         <div ref={parentRef} className="max-h-[520px] overflow-auto custom-scrollbar border-t border-gray-200">
           <div className="overflow-x-auto">
-            <table className="min-w-full">
+            <table className="min-w-full table-auto">
               <thead className="table-header">
                 {table.getHeaderGroups().map(headerGroup => (
                   <tr key={headerGroup.id}>
                     {headerGroup.headers.map(header => (
                       <th
                         key={header.id}
-                        style={{ width: header.getSize() }}
+                        style={{ minWidth: header.getSize() }}
                         className={cls(
                           'table-header-cell',
                           header.column.id === dragging && 'dragging'
@@ -549,6 +552,7 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, o
                     return (
                       <tr
                         key={row.id}
+                        ref={rowVirtualizer.measureElement}
                         className={cls(
                           'table-row absolute left-0 right-0',
                           isSelected && 'selected',
@@ -556,18 +560,30 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, o
                         )}
                         style={{ transform: `translateY(${virtualRow.start}px)` }}
                       >
-                        {row.getVisibleCells().map(cell => (
-                          <td 
-                            key={cell.id} 
-                            className={cls(
-                              'table-cell',
-                              cell.column.id === 'select' && 'checkbox-cell'
-                            )} 
-                            style={{ width: cell.column.getSize() }}
-                          >
-                            {flexRender(cell.column.columnDef.cell ?? ((ctx)=>ctx.getValue()?.toString?.() ?? ''), cell.getContext())}
-                          </td>
-                        ))}
+                        {row.getVisibleCells().map(cell => {
+                          const isInteractive = cell.column.id === 'select' || cell.column.columnDef.meta?.editable
+                          const content = flexRender(cell.column.columnDef.cell ?? ((ctx)=>ctx.getValue()?.toString?.() ?? ''), cell.getContext())
+                          const rawSize = cell.column.getSize?.()
+                          const normalizedWidth = Number.isFinite(rawSize) ? rawSize : undefined
+                          const cellStyle = normalizedWidth ? { minWidth: normalizedWidth } : undefined
+                          const truncateStyle = normalizedWidth ? { '--cell-max-w': `${normalizedWidth}px` } : undefined
+                          return (
+                            <td 
+                              key={cell.id} 
+                              className={cls(
+                                'table-cell',
+                                cell.column.id === 'select' && 'checkbox-cell'
+                              )} 
+                              style={cellStyle}
+                            >
+                              {isInteractive ? content : (
+                                <div className="cell-truncate" style={truncateStyle}>
+                                  <div className="cell-truncate-inner">{content}</div>
+                                </div>
+                              )}
+                            </td>
+                          )
+                        })}
                       </tr>
                     )
                   })

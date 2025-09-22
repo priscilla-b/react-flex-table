@@ -31,7 +31,8 @@ const EDITABLE_COLUMNS = new Set([
   'source',
   'owner',
   'annual_revenue',
-  'next_action_date'
+  'next_action_date',
+  'notes'
 ])
 
 const STAGES = ['Prospect','Qualified','Proposal','Won','Lost']
@@ -411,7 +412,7 @@ LIMIT @limit OFFSET @offset
 
 app.patch('/api/leads/:id', (req, res) => {
   const id = +req.params.id
-  const allowed = ['company_name','contact_name','email','phone','country','stage','source','owner','annual_revenue','next_action_date','tags']
+  const allowed = ['company_name','contact_name','email','phone','country','stage','source','owner','annual_revenue','next_action_date','notes','tags']
   const fields = Object.keys(req.body).filter(k => allowed.includes(k))
   if (fields.length === 0) return res.status(400).json({ error: 'No updatable fields' })
 
@@ -425,9 +426,9 @@ app.patch('/api/leads/:id', (req, res) => {
 app.post('/api/leads', (req, res) => {
   const insert = db.prepare(`
 INSERT INTO leads (company_name, contact_name, email, phone, country, stage, source, owner,
-annual_revenue, next_action_date, tags)
+annual_revenue, next_action_date, notes, tags)
 VALUES (@company_name, @contact_name, @email, @phone, @country, @stage, @source, @owner,
-@annual_revenue, @next_action_date, @tags)
+@annual_revenue, @next_action_date, @notes, @tags)
 `)
   const info = insert.run(req.body)
   const row = db.prepare('SELECT * FROM leads WHERE id=?').get(info.lastInsertRowid)
@@ -488,9 +489,9 @@ app.post('/api/leads/bulk-duplicate', (req, res) => {
 
   const insertStmt = db.prepare(`
     INSERT INTO leads (
-      company_name, contact_name, email, phone, country, stage, source, owner, annual_revenue, next_action_date, created_at, tags
+      company_name, contact_name, email, phone, country, stage, source, owner, annual_revenue, next_action_date, created_at, notes, tags
     ) VALUES (
-      @company_name, @contact_name, @email, @phone, @country, @stage, @source, @owner, @annual_revenue, @next_action_date, @created_at, @tags
+      @company_name, @contact_name, @email, @phone, @country, @stage, @source, @owner, @annual_revenue, @next_action_date, @created_at, @notes, @tags
     )
   `)
 
@@ -510,6 +511,7 @@ app.post('/api/leads/bulk-duplicate', (req, res) => {
           annual_revenue: record.annual_revenue,
           next_action_date: record.next_action_date,
           created_at: new Date().toISOString(),
+          notes: record.notes,
           tags: record.tags,
         }
         const info = insertStmt.run(payload)
