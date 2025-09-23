@@ -1,4 +1,4 @@
-@tailwind base;
+﻿@tailwind base;
 @tailwind components;
 @tailwind utilities;
 
@@ -241,8 +241,8 @@
   
   .table-cell {
     @apply px-1 py-1 text-xs;
-  }
-  
+}
+
   .checkbox {
     @apply w-3 h-3;
   }
@@ -283,16 +283,10 @@
   max-width: 100%;
 }
 
-.table-cell:hover .cell-truncate,
-.table-cell:focus-within .cell-truncate {
-  max-width: none;
-}
-
 .table-cell:hover .cell-truncate-inner,
 .table-cell:focus-within .cell-truncate-inner {
   overflow: visible;
   text-overflow: clip;
   white-space: normal;
-  min-width: max(100%, max-content);
-  max-width: none;
+  word-wrap: break-word !important;
 }

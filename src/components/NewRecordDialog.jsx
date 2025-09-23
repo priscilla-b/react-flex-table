@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react'
-import Modal from './Modal'
+﻿import React, { useEffect, useMemo, useState } from 'react'
+import SidePanel from './SidePanel'
 
 const REQUIRED_FIELDS = ['company_name', 'contact_name', 'email', 'stage', 'source', 'owner']
 
@@ -74,18 +74,19 @@ export default function NewRecordDialog({ open, onClose, onSubmit, loading = fal
   }
 
   return (
-    <Modal
+    <SidePanel
       open={open}
       onClose={loading ? undefined : onClose}
       title="Add New Lead"
       description="Provide the details for the new lead. Fields marked with * are required."
+      widthClass="max-w-3xl"
       actions={[
         { label: 'Cancel', onClick: onClose, variant: 'secondary', disabled: loading },
         { label: loading ? 'Creating...' : 'Create Lead', onClick: handleSubmit, variant: 'primary', disabled: loading },
       ]}
     >
-      <div className="space-y-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className="space-y-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Field
             label="Company *"
             value={values.company_name}
@@ -164,7 +165,7 @@ export default function NewRecordDialog({ open, onClose, onSubmit, loading = fal
           <label className="block text-sm font-medium text-gray-700">Notes</label>
           <textarea
             className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            rows={4}
+            rows={5}
             value={values.notes}
             onChange={handleChange('notes')}
             disabled={loading}
@@ -174,7 +175,7 @@ export default function NewRecordDialog({ open, onClose, onSubmit, loading = fal
           <p className="text-sm text-red-600">{submitError}</p>
         )}
       </div>
-    </Modal>
+    </SidePanel>
   )
 }
 
@@ -213,3 +214,4 @@ function SelectField({ label, options, error, disabled, ...props }) {
     </div>
   )
 }
+
