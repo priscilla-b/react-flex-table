@@ -12,6 +12,7 @@ import ColumnVisibilityMenu from './ColumnVisibilityMenu'
 import SavedViews from './SavedViews'
 import BulkEditDialog from './BulkEditDialog'
 import BulkDuplicateDialog from './BulkDuplicateDialog'
+import NewRecordDialog from './NewRecordDialog'
 import Filters, { createDefaultFilterState, sanitizeFilterState } from './Filters'
 import { fetchViews, createView, updateView, deleteViewServer } from '../lib/dataFetcher'
 
@@ -135,6 +136,9 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, o
   const [bulkDuplicateOpen, setBulkDuplicateOpen] = useState(false)
   const [bulkEditLoading, setBulkEditLoading] = useState(false)
   const [bulkDuplicateLoading, setBulkDuplicateLoading] = useState(false)
+  const [createOpen, setCreateOpen] = useState(false)
+  const [createLoading, setCreateLoading] = useState(false)
+  const [highlightedRowId, setHighlightedRowId] = useState(null)
 
   const dragCol = useRef(null)
   const parentRef = useRef(null)
@@ -260,6 +264,12 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, o
     estimateSize: () => 40,
     overscan: 10,
   })
+
+  useEffect(() => {
+    if (!highlightedRowId) return undefined
+    const timer = setTimeout(() => setHighlightedRowId(null), 4000)
+    return () => clearTimeout(timer)
+  }, [highlightedRowId])
 
   useEffect(() => {
     let mounted = true
@@ -388,6 +398,44 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, o
     }
   }
 
+  const handleCreateSubmit = async (formValues) => {
+    if (!onCreate) return
+    setCreateLoading(true)
+    try {
+      const payload = { ...formValues }
+      payload.annual_revenue = payload.annual_revenue === '' || payload.annual_revenue == null ? null : Number(payload.annual_revenue)
+      if (Number.isNaN(payload.annual_revenue)) {
+        throw new Error('Annual revenue must be a number or left blank.')
+      }
+      payload.next_action_date = payload.next_action_date || null
+      payload.notes = (payload.notes ?? '').trim()
+
+      const created = await onCreate(payload)
+      if (!created || typeof created !== 'object') {
+        throw new Error('Server did not return the created record.')
+      }
+
+      setCreateOpen(false)
+      setPagination(prev => ({ ...prev, pageIndex: 0 }))
+      setData(prev => {
+        const previous = Array.isArray(prev) ? prev : []
+        const without = previous.filter(row => row.id !== created.id)
+        const next = [created, ...without]
+        return pagination.pageSize ? next.slice(0, pagination.pageSize) : next
+      })
+      setTotal(prev => prev + 1)
+      setRowSelection({})
+      setHighlightedRowId(created.id)
+      requestAnimationFrame(() => {
+        parentRef.current?.scrollTo({ top: 0, behavior: 'smooth' })
+      })
+    } catch (error) {
+      throw error
+    } finally {
+      setCreateLoading(false)
+    }
+  }
+
   const renderSortIndicator = (header) => {
     const sortState = header.column.getIsSorted()
     if (!sortState) return ''
@@ -397,31 +445,7 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, o
   return (
     <div className="animate-fade-in">
       <Toolbar
-        onAdd={async () => {
-          if (onCreate) {
-            try {
-              const newRecord = {
-                company_name: 'New Company',
-                contact_name: 'New Contact',
-                email: 'new@example.com',
-                phone: '',
-                country: '',
-                stage: 'Prospect',
-                source: 'Referral',
-                owner: 'Teammate A',
-                annual_revenue: 0,
-                next_action_date: new Date().toISOString().split('T')[0],
-                notes: '',
-                created_at: new Date().toISOString(),
-                tags: JSON.stringify([])
-              }
-              await onCreate(newRecord)
-              setRefreshTrigger(prev => prev + 1)
-            } catch (error) {
-              console.error('Failed to create record:', error)
-            }
-          }
-        }}
+        onAdd={() => setCreateOpen(true)}
         onDeleteSelected={async () => {
           if (!onBulkDelete || !selectedIds.length) return
           try {
@@ -454,6 +478,16 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, o
           loading={viewLoading}
         />
       </Toolbar>
+
+      {createOpen && (
+        <NewRecordDialog
+          open={createOpen}
+          onClose={() => { if (!createLoading) setCreateOpen(false) }}
+          onSubmit={handleCreateSubmit}
+          loading={createLoading}
+          options={filterOptions}
+        />
+      )}
 
       {onBulkEdit && (
         <BulkEditDialog
@@ -556,6 +590,7 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, o
                         className={cls(
                           'table-row absolute left-0 right-0',
                           isSelected && 'selected',
+                          highlightedRowId === row.original?.id && 'row-highlight',
                           virtualRow.index % 2 === 0 && 'bg-white'
                         )}
                         style={{ transform: `translateY(${virtualRow.start}px)` }}
