@@ -18,8 +18,7 @@ owner TEXT NOT NULL,
 annual_revenue REAL,
 next_action_date TEXT, -- ISO string (YYYY-MM-DD)
 notes TEXT,
-created_at TEXT DEFAULT (datetime('now')),
-tags TEXT -- JSON array of strings
+created_at TEXT DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS users (
@@ -79,9 +78,9 @@ const rand = (min,max) => Math.round((Math.random()*(max-min)+min)*100)/100;
 const insert = db.prepare(`
 INSERT INTO leads (
 company_name, contact_name, email, phone, country, stage, source, owner,
-annual_revenue, next_action_date, notes, tags
+annual_revenue, next_action_date, notes
 ) VALUES (@company_name, @contact_name, @email, @phone, @country, @stage, @source, @owner,
-@annual_revenue, @next_action_date, @notes, @tags)
+@annual_revenue, @next_action_date, @notes)
 `);
 
 
@@ -94,7 +93,6 @@ const own = owners[i % owners.length];
 const rev = rand(1_000, 250_000);
 const next = new Date(Date.now() + (i % 60) * 86400000).toISOString().slice(0,10);
 const notes = notesSamples[i % notesSamples.length];
-const tagz = JSON.stringify([ctry, stg].filter(Boolean));
 insert.run({
 company_name: `Company ${i}`,
 contact_name: `Founder ${i}`,
@@ -106,8 +104,7 @@ source: src,
 owner: own,
 annual_revenue: rev,
 next_action_date: next,
-notes: notes,
-tags: tagz,
+notes: notes
 });
 }
 });
