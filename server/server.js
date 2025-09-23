@@ -1,7 +1,7 @@
 /* eslint-env node */
 import express from 'express'
 import cors from 'cors'
-import db from './db.js'
+import database from './db.js'
 
 const app = express()
 app.use(cors())
@@ -362,168 +362,190 @@ function buildAdvancedFiltersClause(advanced = {}) {
   return { sql: wrapped, params }
 }
 
-app.get('/api/leads', (req, res) => {
-  const page = Math.max(parseInt(req.query.page || '1', 10), 1)
-  const pageSize = Math.min(Math.max(parseInt(req.query.pageSize || '25', 10), 1), 200)
-  const sort = ALLOWED_SORT.has(req.query.sort) ? req.query.sort : 'id'
-  const dir = req.query.dir === 'desc' ? 'DESC' : 'ASC'
-
-  let rawFilters = {}
-  if (req.query.filters) {
-    try {
-      rawFilters = JSON.parse(req.query.filters)
-    } catch (err) {
-      console.warn('Invalid filters payload', err)
-    }
-  }
-
-  const { mode, simple, advanced } = normalizeFilterPayload(rawFilters)
-
-  const where = []
-  const params = {}
-
-  applySimpleFilters(where, params, simple)
-
-  if (mode === 'advanced') {
-    const advancedResult = buildAdvancedFiltersClause(advanced)
-    if (advancedResult) {
-      where.push(advancedResult.sql)
-      Object.assign(params, advancedResult.params)
-    }
-  }
-
-  const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : ''
-
-  const total = db.prepare(`SELECT COUNT(*) AS t FROM leads ${whereSql}`).get(params).t
-
-  const sql = `
-SELECT id, company_name, contact_name, email, phone, country, stage, source, owner,
-annual_revenue, next_action_date, created_at, tags
-FROM leads
-${whereSql}
-ORDER BY ${sort} ${dir}
-LIMIT @limit OFFSET @offset
-`
-
-  const rows = db.prepare(sql).all({ ...params, limit: pageSize, offset: (page - 1) * pageSize })
-
-  res.json({ rows, total })
-})
-
-app.patch('/api/leads/:id', (req, res) => {
-  const id = +req.params.id
-  const allowed = ['company_name','contact_name','email','phone','country','stage','source','owner','annual_revenue','next_action_date','notes','tags']
-  const fields = Object.keys(req.body).filter(k => allowed.includes(k))
-  if (fields.length === 0) return res.status(400).json({ error: 'No updatable fields' })
-
-  const sets = fields.map(f => `${f}=@${f}`).join(', ')
-  const stmt = db.prepare(`UPDATE leads SET ${sets} WHERE id=@id`)
-  stmt.run({ ...req.body, id })
-  const row = db.prepare('SELECT * FROM leads WHERE id=?').get(id)
-  res.json(row)
-})
-
-app.post('/api/leads', (req, res) => {
-  const insert = db.prepare(`
-INSERT INTO leads (company_name, contact_name, email, phone, country, stage, source, owner,
-annual_revenue, next_action_date, notes, tags)
-VALUES (@company_name, @contact_name, @email, @phone, @country, @stage, @source, @owner,
-@annual_revenue, @next_action_date, @notes, @tags)
-`)
-  const info = insert.run(req.body)
-  const row = db.prepare('SELECT * FROM leads WHERE id=?').get(info.lastInsertRowid)
-  res.status(201).json(row)
-})
-
-app.post('/api/leads/bulk-delete', (req, res) => {
-  const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(Number).filter(Boolean) : []
-  if (ids.length === 0) return res.status(400).json({ error: 'ids required' })
-  const placeholders = ids.map(() => '?').join(',')
-  db.prepare(`DELETE FROM leads WHERE id IN (${placeholders})`).run(ids)
-  res.json({ deleted: ids.length })
-})
-
-app.post('/api/leads/bulk-edit', (req, res) => {
-  const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(Number).filter(Boolean) : []
-  const column = req.body?.column
-
-  if (ids.length === 0) return res.status(400).json({ error: 'ids required' })
-  if (!column || !EDITABLE_COLUMNS.has(column)) {
-    return res.status(400).json({ error: 'Unsupported column for bulk edit.' })
-  }
-
-  const result = coerceBulkEditValue(column, req.body?.value)
-  if (!result.ok) {
-    return res.status(400).json({ error: result.error })
-  }
-
-  const placeholders = ids.map(() => '?').join(',')
+app.get('/api/leads', async (req, res) => {
   try {
-    const stmt = db.prepare(`UPDATE leads SET ${column} = ? WHERE id IN (${placeholders})`)
-    const info = stmt.run(result.value, ...ids)
-    res.json({ updated: info.changes })
+    const page = Math.max(parseInt(req.query.page || '1', 10), 1)
+    const pageSize = Math.min(Math.max(parseInt(req.query.pageSize || '25', 10), 1), 200)
+    const sort = ALLOWED_SORT.has(req.query.sort) ? req.query.sort : 'id'
+    const dir = req.query.dir === 'desc' ? 'DESC' : 'ASC'
+
+    let rawFilters = {}
+    if (req.query.filters) {
+      try {
+        rawFilters = JSON.parse(req.query.filters)
+      } catch (err) {
+        console.warn('Invalid filters payload', err)
+      }
+    }
+
+    const { mode, simple, advanced } = normalizeFilterPayload(rawFilters)
+
+    const where = []
+    const params = {}
+
+    applySimpleFilters(where, params, simple)
+
+    if (mode === 'advanced') {
+      const advancedResult = buildAdvancedFiltersClause(advanced)
+      if (advancedResult) {
+        where.push(advancedResult.sql)
+        Object.assign(params, advancedResult.params)
+      }
+    }
+
+    const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : ''
+
+    const totalResult = await database.get(`SELECT COUNT(*) AS t FROM leads ${whereSql}`, Object.values(params))
+    const total = totalResult.t
+
+    const sql = `
+  SELECT id, company_name, contact_name, email, phone, country, stage, source, owner,
+  annual_revenue, next_action_date, created_at, notes
+  FROM leads
+  ${whereSql}
+  ORDER BY ${sort} ${dir}
+  LIMIT ? OFFSET ?
+  `
+
+    const rows = await database.all(sql, [...Object.values(params), pageSize, (page - 1) * pageSize])
+
+    res.json({ rows, total })
+  } catch (error) {
+    console.error('Error fetching leads:', error)
+    res.status(500).json({ error: 'Failed to fetch leads' })
+  }
+})
+
+app.patch('/api/leads/:id', async (req, res) => {
+  try {
+    const id = +req.params.id
+    const allowed = ['company_name','contact_name','email','phone','country','stage','source','owner','annual_revenue','next_action_date','notes']
+    const fields = Object.keys(req.body).filter(k => allowed.includes(k))
+    if (fields.length === 0) return res.status(400).json({ error: 'No updatable fields' })
+
+    const sets = fields.map(f => `${f}=?`).join(', ')
+    const values = fields.map(f => req.body[f])
+    
+    await database.run(`UPDATE leads SET ${sets} WHERE id=?`, [...values, id])
+    const row = await database.get('SELECT * FROM leads WHERE id=?', [id])
+    res.json(row)
+  } catch (error) {
+    console.error('Error updating lead:', error)
+    res.status(500).json({ error: 'Failed to update lead' })
+  }
+})
+
+app.post('/api/leads', async (req, res) => {
+  try {
+    const result = await database.run(`
+    INSERT INTO leads (company_name, contact_name, email, phone, country, stage, source, owner,
+    annual_revenue, next_action_date, notes)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      req.body.company_name, req.body.contact_name, req.body.email, req.body.phone,
+      req.body.country, req.body.stage, req.body.source, req.body.owner,
+      req.body.annual_revenue, req.body.next_action_date, req.body.notes
+    ])
+    
+    const row = await database.get('SELECT * FROM leads WHERE id=?', [result.lastID])
+    res.status(201).json(row)
+  } catch (error) {
+    console.error('Error creating lead:', error)
+    res.status(500).json({ error: 'Failed to create lead' })
+  }
+})
+
+app.post('/api/leads/bulk-delete', async (req, res) => {
+  try {
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(Number).filter(Boolean) : []
+    if (ids.length === 0) return res.status(400).json({ error: 'ids required' })
+    const placeholders = ids.map(() => '?').join(',')
+    const result = await database.run(`DELETE FROM leads WHERE id IN (${placeholders})`, ids)
+    res.json({ deleted: result.changes })
+  } catch (error) {
+    console.error('Error bulk deleting leads:', error)
+    res.status(500).json({ error: 'Failed to delete leads' })
+  }
+})
+
+app.post('/api/leads/bulk-edit', async (req, res) => {
+  try {
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(Number).filter(Boolean) : []
+    const column = req.body?.column
+
+    if (ids.length === 0) return res.status(400).json({ error: 'ids required' })
+    if (!column || !EDITABLE_COLUMNS.has(column)) {
+      return res.status(400).json({ error: 'Unsupported column for bulk edit.' })
+    }
+
+    const result = coerceBulkEditValue(column, req.body?.value)
+    if (!result.ok) {
+      return res.status(400).json({ error: result.error })
+    }
+
+    const placeholders = ids.map(() => '?').join(',')
+    const updateResult = await database.run(`UPDATE leads SET ${column} = ? WHERE id IN (${placeholders})`, [result.value, ...ids])
+    res.json({ updated: updateResult.changes })
   } catch (error) {
     console.error('Bulk edit failed', error)
     res.status(500).json({ error: 'Bulk edit failed' })
   }
 })
 
-app.post('/api/leads/bulk-duplicate', (req, res) => {
-  const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(Number).filter(Boolean) : []
-  if (ids.length === 0) return res.status(400).json({ error: 'ids required' })
-
-  let copies = Number(req.body?.copies ?? 1)
-  if (!Number.isInteger(copies) || copies < 1) {
-    return res.status(400).json({ error: 'Copies must be a positive integer.' })
-  }
-  copies = Math.min(copies, 25)
-
-  const prefix = typeof req.body?.prefix === 'string' ? req.body.prefix : ''
-  const suffix = typeof req.body?.suffix === 'string' ? req.body.suffix : ''
-
-  const placeholders = ids.map(() => '?').join(',')
-  const records = db.prepare(`SELECT * FROM leads WHERE id IN (${placeholders})`).all(ids)
-  if (records.length === 0) {
-    return res.status(404).json({ error: 'No leads found for the provided ids.' })
-  }
-
-  const insertStmt = db.prepare(`
-    INSERT INTO leads (
-      company_name, contact_name, email, phone, country, stage, source, owner, annual_revenue, next_action_date, created_at, notes, tags
-    ) VALUES (
-      @company_name, @contact_name, @email, @phone, @country, @stage, @source, @owner, @annual_revenue, @next_action_date, @created_at, @notes, @tags
-    )
-  `)
-
-  const duplicateTransaction = db.transaction(() => {
-    const createdIds = []
-    records.forEach(record => {
-      for (let index = 0; index < copies; index += 1) {
-        const payload = {
-          company_name: formatDuplicateName(record.company_name, { prefix, suffix, index, copies }),
-          contact_name: record.contact_name,
-          email: record.email,
-          phone: record.phone,
-          country: record.country,
-          stage: record.stage,
-          source: record.source,
-          owner: record.owner,
-          annual_revenue: record.annual_revenue,
-          next_action_date: record.next_action_date,
-          created_at: new Date().toISOString(),
-          notes: record.notes,
-          tags: record.tags,
-        }
-        const info = insertStmt.run(payload)
-        createdIds.push(info.lastInsertRowid)
-      }
-    })
-    return createdIds
-  })
-
+app.post('/api/leads/bulk-duplicate', async (req, res) => {
   try {
-    const idsCreated = duplicateTransaction()
-    res.json({ duplicated: idsCreated.length, ids: idsCreated })
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(Number).filter(Boolean) : []
+    if (ids.length === 0) return res.status(400).json({ error: 'ids required' })
+
+    let copies = Number(req.body?.copies ?? 1)
+    if (!Number.isInteger(copies) || copies < 1) {
+      return res.status(400).json({ error: 'Copies must be a positive integer.' })
+    }
+    copies = Math.min(copies, 25)
+
+    const prefix = typeof req.body?.prefix === 'string' ? req.body.prefix : ''
+    const suffix = typeof req.body?.suffix === 'string' ? req.body.suffix : ''
+
+    const placeholders = ids.map(() => '?').join(',')
+    const records = await database.all(`SELECT * FROM leads WHERE id IN (${placeholders})`, ids)
+    if (records.length === 0) {
+      return res.status(404).json({ error: 'No leads found for the provided ids.' })
+    }
+
+    await database.run('BEGIN TRANSACTION')
+    
+    try {
+      const createdIds = []
+      for (const record of records) {
+        for (let index = 0; index < copies; index += 1) {
+          const result = await database.run(`
+            INSERT INTO leads (
+              company_name, contact_name, email, phone, country, stage, source, owner, annual_revenue, next_action_date, created_at, notes
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `, [
+            formatDuplicateName(record.company_name, { prefix, suffix, index, copies }),
+            record.contact_name,
+            record.email,
+            record.phone,
+            record.country,
+            record.stage,
+            record.source,
+            record.owner,
+            record.annual_revenue,
+            record.next_action_date,
+            new Date().toISOString(),
+            record.notes,
+          ])
+          createdIds.push(result.lastID)
+        }
+      }
+      
+      await database.run('COMMIT')
+      res.json({ duplicated: createdIds.length, ids: createdIds })
+    } catch (error) {
+      await database.run('ROLLBACK')
+      throw error
+    }
   } catch (error) {
     console.error('Bulk duplicate failed', error)
     res.status(500).json({ error: 'Bulk duplicate failed' })
@@ -531,72 +553,92 @@ app.post('/api/leads/bulk-duplicate', (req, res) => {
 })
 
 const CURRENT_USER_ID = 1
-app.get('/api/views', (req, res) => {
-  const resource = req.query.resource
-  if (!resource) return res.status(400).json({ error: 'resource required' })
 
-  const rows = db.prepare(`
-      SELECT id, name, resource, state, visibility, created_at, updated_at
-      FROM views
-      WHERE user_id=@uid AND resource=@resource
-      ORDER BY name ASC
-    `).all({ uid: CURRENT_USER_ID, resource })
-
-  res.json(rows.map(r => ({ ...r, state: JSON.parse(r.state) })))
-})
-
-app.post('/api/views', (req, res) => {
-  const { name, resource, state, visibility = 'private', is_default = 0 } = req.body || {}
-  if (!name || !resource || !state) return res.status(400).json({ error: 'name, resource, state required' })
-
-  const stmt = db.prepare(`
-      INSERT INTO views (user_id, resource, name, state, visibility)
-      VALUES (@uid, @resource, @name, @state, @visibility)
-    `)
-
+app.get('/api/views', async (req, res) => {
   try {
-    const info = stmt.run({
-      uid: CURRENT_USER_ID,
-      resource,
-      name,
-      state: JSON.stringify(state),
-      visibility,
-      is_default: is_default ? 1 : 0
-    })
+    const resource = req.query.resource
+    if (!resource) return res.status(400).json({ error: 'resource required' })
 
-    const view = db.prepare('SELECT * FROM views WHERE id=?').get(info.lastInsertRowid)
-    res.status(201).json({ ...view, state: JSON.parse(view.state) })
-  } catch (e) {
-    if (String(e.message).includes('UNIQUE')) {
-      return res.status(409).json({ error: 'view name already exists' })
-    }
-    throw e
+    const rows = await database.all(`
+        SELECT id, name, resource, state, visibility, created_at, updated_at
+        FROM views
+        WHERE user_id=? AND resource=?
+        ORDER BY name ASC
+      `, [CURRENT_USER_ID, resource])
+
+    res.json(rows.map(r => ({ ...r, state: JSON.parse(r.state) })))
+  } catch (error) {
+    console.error('Error fetching views:', error)
+    res.status(500).json({ error: 'Failed to fetch views' })
   }
 })
 
-app.patch('/api/views/:id', (req, res) => {
-  const id = +req.params.id
-  const updates = []
-  const params = { id, uid: CURRENT_USER_ID }
+app.post('/api/views', async (req, res) => {
+  try {
+    const { name, resource, state, visibility = 'private', is_default = 0 } = req.body || {}
+    if (!name || !resource || !state) return res.status(400).json({ error: 'name, resource, state required' })
 
-  if ('name' in req.body) { updates.push('name=@name'); params.name = req.body.name }
-  if ('state' in req.body) { updates.push('state=@state'); params.state = JSON.stringify(req.body.state) }
-  if ('visibility' in req.body) { updates.push('visibility=@visibility'); params.visibility = req.body.visibility }
+    const result = await database.run(`
+        INSERT INTO views (user_id, resource, name, state, visibility)
+        VALUES (?, ?, ?, ?, ?)
+      `, [CURRENT_USER_ID, resource, name, JSON.stringify(state), visibility])
 
-  if (!updates.length) return res.status(400).json({ error: 'no fields to update' })
-
-  db.prepare(`UPDATE views SET ${updates.join(', ')}, updated_at=datetime('now') WHERE id=@id AND user_id=@uid`).run(params)
-  const view = db.prepare('SELECT * FROM views WHERE id=@id AND user_id=@uid').get(params)
-  if (!view) return res.status(404).json({ error: 'not found' })
-  res.json({ ...view, state: JSON.parse(view.state) })
+    const view = await database.get('SELECT * FROM views WHERE id=?', [result.lastID])
+    res.status(201).json({ ...view, state: JSON.parse(view.state) })
+  } catch (error) {
+    if (String(error.message).includes('UNIQUE')) {
+      return res.status(409).json({ error: 'view name already exists' })
+    }
+    console.error('Error creating view:', error)
+    res.status(500).json({ error: 'Failed to create view' })
+  }
 })
 
-app.delete('/api/views/:id', (req, res) => {
-  const id = +req.params.id
-  const info = db.prepare('DELETE FROM views WHERE id=@id AND user_id=@uid').run({ id, uid: CURRENT_USER_ID })
-  res.json({ deleted: info.changes })
+app.patch('/api/views/:id', async (req, res) => {
+  try {
+    const id = +req.params.id
+    const updates = []
+    const params = [CURRENT_USER_ID]
+
+    if ('name' in req.body) { updates.push('name=?'); params.unshift(req.body.name) }
+    if ('state' in req.body) { updates.push('state=?'); params.unshift(JSON.stringify(req.body.state)) }
+    if ('visibility' in req.body) { updates.push('visibility=?'); params.unshift(req.body.visibility) }
+
+    if (!updates.length) return res.status(400).json({ error: 'no fields to update' })
+
+    params.push(id) 
+    await database.run(`UPDATE views SET ${updates.join(', ')}, updated_at=datetime('now') WHERE id=? AND user_id=?`, params.reverse())
+    
+    const view = await database.get('SELECT * FROM views WHERE id=? AND user_id=?', [id, CURRENT_USER_ID])
+    if (!view) return res.status(404).json({ error: 'not found' })
+    res.json({ ...view, state: JSON.parse(view.state) })
+  } catch (error) {
+    console.error('Error updating view:', error)
+    res.status(500).json({ error: 'Failed to update view' })
+  }
 })
 
-const PORT = globalThis.process?.env?.PORT || 5174
-app.listen(PORT, () => console.log(`CRM API on http://localhost:${PORT}`))
+app.delete('/api/views/:id', async (req, res) => {
+  try {
+    const id = +req.params.id
+    const result = await database.run('DELETE FROM views WHERE id=? AND user_id=?', [id, CURRENT_USER_ID])
+    res.json({ deleted: result.changes })
+  } catch (error) {
+    console.error('Error deleting view:', error)
+    res.status(500).json({ error: 'Failed to delete view' })
+  }
+})
+
+async function startServer() {
+  try {
+    await database.initialize()
+    const PORT = globalThis.process?.env?.PORT || 5174
+    app.listen(PORT, () => console.log(`CRM API on http://localhost:${PORT}`))
+  } catch (error) {
+    console.error('Failed to start server:', error)
+    process.exit(1)
+  }
+}
+
+startServer()
 
