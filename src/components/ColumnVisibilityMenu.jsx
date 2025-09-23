@@ -1,5 +1,12 @@
 import React from 'react'
 
+function resolveHeaderLabel(column) {
+  if (!column) return ''
+  if (typeof column.header === 'string') return column.header
+  if (typeof column.header === 'function') return column.accessorKey || 'Column'
+  return column.accessorKey || String(column.id || '')
+}
+
 export default function ColumnVisibilityMenu({ table }) {
   return (
     <details className="relative group">
@@ -22,7 +29,7 @@ export default function ColumnVisibilityMenu({ table }) {
               checked={col.getIsVisible()} 
               onChange={col.getToggleVisibilityHandler()} 
             />
-            <span className="text-gray-700">{col.columnDef.header}</span>
+            <span className="text-gray-700">{resolveHeaderLabel(col.columnDef)}</span>
           </label>
         ))}
       </div>
