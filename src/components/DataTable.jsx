@@ -635,8 +635,8 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, o
         />
       )}
 
-    <div className="table-container flex-1 flex flex-col min-h-0">
-        <div ref={parentRef} className="flex-1 overflow-auto custom-scrollbar">
+    <div className="table-container flex-1 flex flex-col min-h-0 min-w-0">
+        <div ref={parentRef} className="flex-1 min-h-0 min-w-0 overflow-auto custom-scrollbar">
           <table className="min-w-full table-fixed" style={{ width: table.getTotalSize() }}>
             <thead className="table-header sticky top-0 z-10">
               

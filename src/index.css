@@ -157,11 +157,12 @@
 /* Custom scrollbar */
 .custom-scrollbar {
   scroll-behavior: smooth;
+  scrollbar-gutter: stable both-edges;
 }
 
 .custom-scrollbar::-webkit-scrollbar {
   width: 10px;
-  height: 3px;
+  height: 8px;
 }
 
 .custom-scrollbar::-webkit-scrollbar-track {
@@ -312,5 +313,6 @@
 .filter-input {
   @apply w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200;
 }
+
 
 
