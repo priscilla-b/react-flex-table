@@ -1,8 +1,13 @@
-import React, { useRef, useState } from 'react'
+import React, { useCallback, useRef, useState } from 'react'
+import useClickOutside from '../hooks/useClickOutside'
 
 export default function SavedViews({ views, onSave, onLoad, onDelete, onEditMeta, onSaveState,  loading = false, }) {
   const [open, setOpen] = useState(false)
   const inputRef = useRef(null)
+  const containerRef = useRef(null)
+  const closeViews = useCallback(() => setOpen(false), [])
+  useClickOutside(containerRef, closeViews, open)
+
   const [saveName, setSaveName] = useState('');
   const [saveVisibility, setSaveVisibility] = useState('private')
   const [editingId, setEditingId] = useState(null)
@@ -43,7 +48,7 @@ export default function SavedViews({ views, onSave, onLoad, onDelete, onEditMeta
   const count = isArray ? (views?.length || 0) : Object.keys(views || {}).length
 
   return (
-    <div className="relative">
+    <div ref={containerRef} className="relative">
       <button
         onClick={() => setOpen(v => !v)}
         className="toolbar-button bg-gray-100 hover:bg-gray-200 text-gray-700"
@@ -210,3 +215,5 @@ export default function SavedViews({ views, onSave, onLoad, onDelete, onEditMeta
   );
 
 }
+
+

@@ -1,4 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import useClickOutside from '../hooks/useClickOutside'
 
 const SIMPLE_FILTER_TEMPLATE = {
   company: '',
@@ -226,6 +227,10 @@ export default function Filters({ filters = createDefaultFilterState(), onApply,
   const [activeTab, setActiveTab] = useState('basic')
   const [simpleDraft, setSimpleDraft] = useState(createEmptySimpleFilters())
   const [advancedDraft, setAdvancedDraft] = useState(createDefaultAdvancedState())
+  const containerRef = useRef(null)
+  const closeFilters = useCallback(() => setOpen(false), [])
+  useClickOutside(containerRef, closeFilters, open)
+
 
   const appliedState = useMemo(() => sanitizeFilterState(filters), [filters])
 
@@ -510,7 +515,7 @@ export default function Filters({ filters = createDefaultFilterState(), onApply,
   )
 
   return (
-    <div className="relative">
+    <div ref={containerRef} className="relative">
       <button
         type="button"
         onClick={() => setOpen(v => !v)}
@@ -674,3 +679,5 @@ export default function Filters({ filters = createDefaultFilterState(), onApply,
     </div>
   )
 }
+
+
