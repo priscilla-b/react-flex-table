@@ -7,8 +7,19 @@ sqlite3.verbose();
 // Create database connection
 const db = new sqlite3.Database('./flex-table.db');
 
-// Promisify database methods for async/await usage
-const dbRun = promisify(db.run.bind(db));
+function run(sql, params = []) {
+  return new Promise((resolve, reject) => {
+    db.run(sql, params, function (err) {
+      if (err) {
+        reject(err);
+        return;
+      }
+      resolve({ lastID: this.lastID, changes: this.changes });
+    });
+  });
+}
+
+// Promisify remaining database methods for async/await usage
 const dbGet = promisify(db.get.bind(db));
 const dbAll = promisify(db.all.bind(db));
 const dbExec = promisify(db.exec.bind(db));
@@ -17,7 +28,7 @@ const dbExec = promisify(db.exec.bind(db));
 async function initializeDatabase() {
   try {
     // Set WAL mode for better performance
-    await dbRun('PRAGMA journal_mode = WAL');
+    await run('PRAGMA journal_mode = WAL');
 
     // Create tables
     await dbExec(`
@@ -63,7 +74,7 @@ async function initializeDatabase() {
     // Ensure a default user exists
     const userCount = await dbGet('SELECT COUNT(*) as c FROM users');
     if (userCount.c === 0) {
-      await dbRun('INSERT INTO users (email) VALUES (?)', ['demo@example.com']);
+      await run('INSERT INTO users (email) VALUES (?)', ['demo@example.com']);
     }
 
     const count = await dbGet('SELECT COUNT(*) as c FROM leads');
@@ -88,7 +99,7 @@ async function initializeDatabase() {
       const rand = (min,max) => Math.round((Math.random()*(max-min)+min)*100)/100;
 
       // Begin transaction for bulk insert
-      await dbRun('BEGIN TRANSACTION');
+      await run('BEGIN TRANSACTION');
       
       try {
         for (let i = 1; i <= 10000; i++) {
@@ -100,7 +111,7 @@ async function initializeDatabase() {
           const next = new Date(Date.now() + (i % 60) * 86400000).toISOString().slice(0,10);
           const notes = notesSamples[i % notesSamples.length];
           
-          await dbRun(`
+          await run(`
             INSERT INTO leads (
               company_name, contact_name, email, phone, country, stage, source, owner,
               annual_revenue, next_action_date, notes
@@ -120,10 +131,10 @@ async function initializeDatabase() {
           ]);
         }
         
-        await dbRun('COMMIT');
+        await run('COMMIT');
         console.log('Database seeded with 10,000 leads');
       } catch (error) {
-        await dbRun('ROLLBACK');
+        await run('ROLLBACK');
         throw error;
       }
     }
@@ -138,7 +149,7 @@ async function initializeDatabase() {
 // Export database instance and helper functions
 export default {
   db,
-  run: dbRun,
+  run,
   get: dbGet,
   all: dbAll,
   exec: dbExec,
