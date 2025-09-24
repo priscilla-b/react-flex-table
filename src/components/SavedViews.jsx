@@ -1,7 +1,18 @@
 import React, { useCallback, useRef, useState } from 'react'
 import useClickOutside from '../hooks/useClickOutside'
 
-export default function SavedViews({ views, onSave, onLoad, onDelete, onEditMeta, onSaveState,  loading = false, }) {
+export default function SavedViews({
+  views,
+  onSave,
+  onLoad,
+  onDelete,
+  onEditMeta,
+  onSaveState,
+  loading = false,
+  activeView = null,
+  activeViewDirty = false,
+  onClearActive,
+}) {
   const [open, setOpen] = useState(false)
   const inputRef = useRef(null)
   const containerRef = useRef(null)
@@ -13,6 +24,16 @@ export default function SavedViews({ views, onSave, onLoad, onDelete, onEditMeta
   const [editingId, setEditingId] = useState(null)
   const [editName, setEditName] = useState('')
   const [editVisibility, setEditVisibility] = useState('private')
+
+  const normalizedViews = Array.isArray(views) ? views : Object.values(views || {})
+  const count = normalizedViews.length
+  const activeViewId = activeView?.id ?? null
+  const activeViewName = activeView?.name ?? ''
+  const activeViewVisibility = activeView?.visibility || 'private'
+  const hasActiveView = Boolean(activeViewId)
+  const activeButtonTitle = hasActiveView
+    ? `Currently showing: ${activeViewName || 'Unnamed view'} (${activeViewVisibility})`
+    : 'Saved views menu'
 
    const handleSaveNew = async () => {
     if (!saveName.trim()) return;
@@ -44,22 +65,28 @@ export default function SavedViews({ views, onSave, onLoad, onDelete, onEditMeta
     cancelEdit();
   };
 
-  const isArray = Array.isArray(views)
-  const count = isArray ? (views?.length || 0) : Object.keys(views || {}).length
-
   return (
     <div ref={containerRef} className="relative">
       <button
         onClick={() => setOpen(v => !v)}
-        className="toolbar-button bg-gray-100 hover:bg-gray-200 text-gray-700"
+        className="toolbar-button bg-gray-100 hover:bg-gray-200 text-gray-700 flex items-center"
         aria-expanded={open}
         aria-haspopup="true"
+        title={activeButtonTitle}
       >
-        <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
-        </svg>
-        Views ({count})
+        <span className="flex items-center">
+          <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                  d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+          </svg>
+          <span>Views ({count})</span>
+        </span>
+        {hasActiveView && (
+          <span className={`ml-2 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${activeViewDirty ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'}`}>
+            <span className={`h-1.5 w-1.5 rounded-full ${activeViewDirty ? 'bg-amber-500' : 'bg-blue-500'}`} />
+            {activeViewDirty ? 'Edited view' : 'Active'}
+          </span>
+        )}
       </button>
 
       {open && (
@@ -67,6 +94,31 @@ export default function SavedViews({ views, onSave, onLoad, onDelete, onEditMeta
           <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
             Saved Views
           </div>
+
+          {hasActiveView && (
+            <div className="mb-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-700">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold text-blue-800 truncate" title={activeViewName || 'Unnamed view'}>
+                    {activeViewName || 'Unnamed view'}
+                  </div>
+                  <div className="text-xs text-blue-600">
+                    Currently applied{activeViewDirty ? ' (edited)' : ''}
+                  </div>
+                  <div className="text-xs text-blue-500">Visibility: {activeViewVisibility}</div>
+                </div>
+                {typeof onClearActive === 'function' && (
+                  <button
+                    type="button"
+                    className="text-xs font-medium text-blue-700 hover:text-blue-900"
+                    onClick={onClearActive}
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
 
           {!editingId ? (
             <div className="mb-3">

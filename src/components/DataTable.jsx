@@ -247,6 +247,7 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, o
   const [columnVisibility, setColumnVisibility] = useState({})
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 25 })
   const [views, setViews] = useState([])
+  const [activeViewId, setActiveViewId] = useState(null)
   const [viewLoading, setViewLoading] = useState(false)
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(false)
@@ -278,6 +279,21 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, o
   }, [userColumns])
 
   const columnFilters = useMemo(() => ([{ id: FILTER_COLUMN_ID, value: filterState }]), [filterState])
+
+  const currentViewState = useMemo(() => currentStateSnapshot(), [sorting, columnFilters, columnOrder, columnVisibility, pagination])
+  const activeView = useMemo(() => views.find(v => v.id === activeViewId) ?? null, [views, activeViewId])
+  const activeViewDirty = useMemo(() => {
+    if (!activeView) return false
+    return stableStringify(activeView.state) !== stableStringify(currentViewState)
+  }, [activeView, currentViewState])
+  const clearActiveView = useCallback(() => setActiveViewId(null), [])
+
+  useEffect(() => {
+    if (!activeViewId) return
+    if (!views.some(v => v.id === activeViewId)) {
+      setActiveViewId(null)
+    }
+  }, [views, activeViewId])
 
   const applyFilters = useCallback((nextFilters) => {
     const sanitized = sanitizeFilterState(nextFilters)
@@ -464,17 +480,22 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, o
     const state = currentStateSnapshot()
     const created = await createView(RESOURCE, name, state, visibility, isDefault)
     setViews(v => [...v.filter(x => x.id !== created.id), created].sort((a,b)=>a.name.localeCompare(b.name)))
+    setActiveViewId(created.id)
   }
 
   async function loadViewById(id) {
     const v = views.find(x => x.id === id)
     if (!v) return
     applyViewState(v.state)
+    setActiveViewId(v.id)
   }
 
   async function deleteViewById(id) {
     await deleteViewServer(id)
     setViews(v => v.filter(x => x.id !== id))
+    if (id === activeViewId) {
+      setActiveViewId(null)
+    }
   }
 
   async function editViewMeta(id, { name, visibility }) {
@@ -602,6 +623,9 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, o
             onEditMeta={editViewMeta}
             onSaveState={saveCurrentStateToView}
             loading={viewLoading}
+            activeView={activeView}
+            activeViewDirty={activeViewDirty}
+            onClearActive={clearActiveView}
             />
         </Toolbar>
       </div>
