@@ -517,36 +517,46 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, o
 
     <div className="table-container flex-1 flex flex-col min-h-0">
         <div ref={parentRef} className="flex-1 overflow-auto custom-scrollbar">
-          <table className="min-w-full table-auto">
+          <table className="min-w-full table-fixed" style={{ width: table.getTotalSize() }}>
             <thead className="table-header sticky top-0 z-10">
               
                 {table.getHeaderGroups().map(headerGroup => (
                   <tr key={headerGroup.id}>
-                    {headerGroup.headers.map(header => (
-                      <th
-                        key={header.id}
-                        style={{ minWidth: header.getSize() }}
-                        className={cls(
-                          'table-header-cell',
-                          header.column.id === dragging && 'dragging'
-                        )}
-                        draggable
-                        onDragStart={()=>{ 
-                          dragCol.current = header.column.id
-                          setDragging(header.column.id)
+                    {headerGroup.headers.map(header => {
+                      const headerSize = header.getSize?.() ?? header.column.getSize?.()
+                      const normalizedHeaderWidth = Number.isFinite(headerSize) ? headerSize : undefined
+                      const headerStyle = normalizedHeaderWidth
+                        ? {
+                            width: normalizedHeaderWidth,
+                            minWidth: header.column.columnDef?.minSize ?? normalizedHeaderWidth,
+                            maxWidth: header.column.columnDef?.maxSize ?? normalizedHeaderWidth,
+                          }
+                        : undefined
+                      return (
+                        <th
+                          key={header.id}
+                          style={headerStyle}
+                          className={cls(
+                            'table-header-cell',
+                            header.column.id === dragging && 'dragging'
+                          )}
+                          draggable
+                          onDragStart={()=>{ 
+                            dragCol.current = header.column.id
+                            setDragging(header.column.id)
                         }}
-                        onDragEnd={() => setDragging(null)}
-                        onDragOver={(e)=>e.preventDefault()}
-                        onDrop={()=>{
-                          const src = dragCol.current
-                          const dest = header.column.id
-                          if (!src || src===dest) return
-                          const order = table.getState().columnOrder.length ? [...table.getState().columnOrder] : table.getAllLeafColumns().map(c=>c.id)
-                          const srcIdx = order.indexOf(src)
-                          const destIdx = order.indexOf(dest)
-                          order.splice(destIdx, 0, ...order.splice(srcIdx, 1))
-                          setColumnOrder(order)
-                          setDragging(null)
+                          onDragEnd={() => setDragging(null)}
+                          onDragOver={(e)=>e.preventDefault()}
+                          onDrop={()=>{
+                            const src = dragCol.current
+                            const dest = header.column.id
+                            if (!src || src===dest) return
+                            const order = table.getState().columnOrder.length ? [...table.getState().columnOrder] : table.getAllLeafColumns().map(c=>c.id)
+                            const srcIdx = order.indexOf(src)
+                            const destIdx = order.indexOf(dest)
+                            order.splice(destIdx, 0, ...order.splice(srcIdx, 1))
+                            setColumnOrder(order)
+                            setDragging(null)
                         }}
                       >
                         {header.isPlaceholder ? null : (
@@ -576,7 +586,7 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, o
                           </div>
                         )}
                       </th>
-                    ))}
+                    )})}
                   </tr>
                 ))}
               </thead>
@@ -601,6 +611,7 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, o
                       <tr
                         key={row.id}
                         ref={rowVirtualizer.measureElement}
+                        data-index={virtualRow.index}
                         className={cls(
                           'table-row absolute left-0 right-0',
                           isSelected && 'selected',
@@ -612,10 +623,21 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, o
                         {row.getVisibleCells().map(cell => {
                           const isInteractive = cell.column.id === 'select' || cell.column.columnDef.meta?.editable
                           const content = flexRender(cell.column.columnDef.cell ?? ((ctx)=>ctx.getValue()?.toString?.() ?? ''), cell.getContext())
+                          const rawValue = cell.getValue?.()
                           const rawSize = cell.column.getSize?.()
                           const normalizedWidth = Number.isFinite(rawSize) ? rawSize : undefined
-                          const cellStyle = normalizedWidth ? { minWidth: normalizedWidth } : undefined
+                          const cellStyle = normalizedWidth
+                            ? { width: normalizedWidth, minWidth: normalizedWidth, maxWidth: normalizedWidth }
+                            : undefined
                           const truncateStyle = normalizedWidth ? { '--cell-max-w': `${normalizedWidth}px` } : undefined
+                          const tooltip =
+                            rawValue === null || rawValue === undefined
+                              ? undefined
+                              : typeof rawValue === 'string'
+                                ? rawValue
+                                : (typeof rawValue === 'number' || typeof rawValue === 'boolean')
+                                  ? String(rawValue)
+                                  : undefined
                           return (
                             <td 
                               key={cell.id} 
@@ -626,7 +648,7 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, o
                               style={cellStyle}
                             >
                               {isInteractive ? content : (
-                                <div className="cell-truncate" style={truncateStyle}>
+                                <div className="cell-truncate" style={truncateStyle} title={tooltip}>
                                   <div className="cell-truncate-inner">{content}</div>
                                 </div>
                               )}
@@ -687,21 +709,6 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, o
     </div>
   )
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
