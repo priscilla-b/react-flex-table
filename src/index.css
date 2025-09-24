@@ -56,19 +56,9 @@
   @apply box-content px-4 py-3 text-gray-700 text-xs;
 }
 
-.table-cell:hover:not(.table-cell-editing) {
+.table-cell:hover{
   @apply bg-blue-50/30 shadow-[0_0_0_1px_rgba(59,130,246,0.1)] 
     -translate-y-px transition-all duration-200 ease-in-out;
-}
-
-.table-cell-editing {
-  @apply relative px-2 py-1 bg-slate-50 border-2 border-blue-500 rounded;
-  overflow: visible;
-    white-space: normal;
-    text-overflow: clip;
-    word-wrap: break-word;
-    word-break: break-word;
-    overflow-wrap: anywhere;
 }
 
 .cell-truncate{

@@ -65,49 +65,157 @@ function EditableCell({ getValue, row, column, table }) {
   const [value, setValue] = useState(initial);
   const [editing, setEditing] = useState(false);
 
+  const editor = column.columnDef?.editor || {};
+  const editorType = editor.type || 'textarea';
+
+  // debounce for text/textarea
   const saveDebounced = useRef(
     debounce((val) => {
       table.options.meta?.onUpdateCell?.(row.original.id, column.id, val);
     }, 300)
   ).current;
 
+  // immediate save (used by select/date/number when it makes sense)
+  const saveNow = useCallback((val) => {
+    table.options.meta?.onUpdateCell?.(row.original.id, column.id, val);
+  }, [row.original.id, column.id, table.options.meta]);
+
   useEffect(() => { setValue(initial); }, [initial]);
 
-  const onExit = useCallback(() => setEditing(false), []);
-  const onSaveNow = useCallback(() => {
-    saveDebounced.flush?.();
-    setEditing(false);
-  }, [saveDebounced]);
+  const exitEdit = useCallback(() => setEditing(false), []);
+  const cancelEdit = useCallback(() => { setValue(initial); setEditing(false); }, [initial]);
 
   const handleKeyDown = (e) => {
+    if (e.key === 'Escape') {
+      cancelEdit();
+      return;
+    }
     if (e.key === 'Enter') {
-      onSaveNow();
-    } else if (e.key === 'Escape') {
-      setValue(initial);
-      onExit();
+      if (editorType === 'textarea' || editorType === 'number' || editorType === 'date') {
+        // flush debounced save for text/textarea; others will have saved on change
+        saveDebounced.flush?.();
+        exitEdit();
+      }
     }
   };
 
+  // ===== textarea autosize =====
   const textareaRef = useRef(null);
-
   const syncTextareaHeight = useCallback(() => {
     const ta = textareaRef.current;
     if (!ta) return;
     ta.style.height = 'auto';
     ta.style.height = `${ta.scrollHeight}px`;
   }, []);
-
-  useEffect(() => {
-    if (!editing) return;
-    syncTextareaHeight();
-  }, [editing, value, syncTextareaHeight]);
+  useEffect(() => { if (editing && editorType === 'textarea') syncTextareaHeight(); }, [editing, value, editorType, syncTextareaHeight]);
 
   // focus when entering edit
+  const inputRef = useRef(null);
+  const selectRef = useRef(null);
   useEffect(() => {
     if (!editing) return;
-    const el = textareaRef.current;
+    const el =
+      editorType === 'textarea' ? textareaRef.current :
+      editorType === 'select' ? selectRef.current :
+      inputRef.current;
     el?.focus?.();
-  }, [editing, value]);
+    if (editorType === 'date' && el?.showPicker) el.showPicker();
+  }, [editing, editorType, value]);
+
+  const selectOptions = Array.isArray(editor.options) ? editor.options : [];
+  const normOptions = selectOptions.map(opt =>
+    typeof opt === 'string' ? { label: opt, value: opt } : opt
+  );
+  const allowNull = editor.allowNull ?? true;
+
+  const renderEditor = () => {
+    switch (editorType) {
+      case 'select':
+        return (
+          <select
+            ref={selectRef}
+            className="w-full bg-transparent outline-none leading-5"
+            value={value ?? ''} 
+            onChange={(e) => {
+              const v = e.target.value === '' ? null : e.target.value;
+              setValue(v);
+              saveNow(v);        
+              exitEdit();        
+            }}
+            onBlur={() => exitEdit()}
+            onKeyDown={handleKeyDown}
+          >
+            {allowNull && <option value="">{editor.placeholder ?? '—'}</option>}
+            {normOptions.map(o => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        );
+
+      case 'date':
+        return (
+          <input
+            ref={inputRef}
+            type="date"
+            className="w-full bg-transparent outline-none leading-5"
+            value={(value ?? '').toString().slice(0,10)}
+            onChange={(e) => { setValue(e.target.value); saveNow(e.target.value); }}
+            onBlur={() => exitEdit()}
+            onKeyDown={handleKeyDown}
+          />
+        );
+
+      case 'number':
+        return (
+          <input
+            ref={inputRef}
+            type="number"
+            className="w-full bg-transparent outline-none leading-5"
+            value={value ?? ''}
+            onChange={(e) => {
+              const num = e.target.value === '' ? null : Number(e.target.value);
+              setValue(num);
+              saveDebounced(num);
+            }}
+            onBlur={() => { saveDebounced.flush?.(); exitEdit(); }}
+            onKeyDown={handleKeyDown}
+          />
+        );
+
+      case 'textarea':
+        return (
+          <textarea
+            ref={textareaRef}
+            rows={1}
+            className="w-full resize-none leading-5 bg-transparent outline-none"
+            value={value ?? ''}
+            onChange={(e) => { setValue(e.target.value); saveDebounced(e.target.value); syncTextareaHeight(); }}
+            onBlur={() => { saveDebounced.flush?.(); exitEdit(); }}
+            onKeyDown={handleKeyDown}
+          />
+        );
+
+      default: // 'text'
+        return (
+          <input
+            ref={inputRef}
+            className="w-full bg-transparent outline-none leading-5"
+            value={value ?? ''}
+            onChange={(e) => { setValue(e.target.value); saveDebounced(e.target.value); }}
+            onBlur={() => { saveDebounced.flush?.(); exitEdit(); }}
+            onKeyDown={handleKeyDown}
+          />
+        );
+    }
+  };
+
+  const renderDisplay = () => {
+    return (
+      <div className="cell-truncate">
+        <span className="cell-truncate-inner block">{String(value ?? '')}</span>
+      </div>
+    );
+  };
 
   return (
     <div
@@ -116,32 +224,19 @@ function EditableCell({ getValue, row, column, table }) {
       onKeyDown={handleKeyDown}
       className={cls(
         'relative group cursor-pointer transition-all duration-200',
-        editing && 'table-cell-editing'
+        editing && 'relative px-2 py-1 bg-slate-50 border-2 border-blue-500 rounded'
       )}
       title="click to edit"
     >
-      {editing ? (
-          <textarea
-            ref={textareaRef}
-            rows={1}
-            className="w-full resize-none leading-5 bg-transparent outline-none"
-            value={value ?? ''}
-            onChange={(e) => { setValue(e.target.value); saveDebounced(e.target.value); syncTextareaHeight(); }}
-            onBlur={onExit}
-            onKeyDown={(e) => {
-              if (e.key === 'Escape') { setValue(initial); onExit(); }
-            }}
-          />
-        ) :  (
-        <div className="cell-truncate">
-          <span className="cell-truncate-inner block">
-            {String(value ?? '')}
-          </span>
-        </div>
+      {editing ? renderEditor() : renderDisplay()}
+
+      {!editing && (
+        <div className="absolute inset-0 bg-blue-50 opacity-0 group-hover:opacity-20 transition-opacity duration-200 pointer-events-none rounded" />
       )}
     </div>
   );
 }
+
 
 export default function DataTable({ columns: userColumns, fetcher, entityName, onCreate, onBulkDelete, onBulkEdit, onBulkDuplicate, onBulkUpload, onPatch }) {
   const [data, setData] = useState([])
