@@ -225,7 +225,7 @@ function EditableCell({ getValue, row, column, table }) {
       onClick={() => setEditing(true)}
       onKeyDown={handleKeyDown}
       className={cls(
-        'relative group cursor-pointer transition-all duration-200',
+        'relative group cursor-pointer transition-colors duration-75',
         editing && 'relative px-2 py-1 bg-slate-50 border-2 border-blue-500 rounded'
       )}
       title="click to edit"
@@ -233,7 +233,7 @@ function EditableCell({ getValue, row, column, table }) {
       {editing ? renderEditor() : renderDisplay()}
 
       {!editing && (
-        <div className="absolute inset-0 bg-blue-50 opacity-0 group-hover:opacity-20 transition-opacity duration-200 pointer-events-none rounded" />
+        <div className="absolute inset-0 bg-blue-50 opacity-0 group-hover:opacity-20 transition-opacity duration-75 pointer-events-none rounded" />
       )}
     </div>
   );
