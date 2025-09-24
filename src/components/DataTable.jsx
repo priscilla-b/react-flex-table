@@ -265,6 +265,7 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, o
   const [createOpen, setCreateOpen] = useState(false)
   const [createLoading, setCreateLoading] = useState(false)
   const [highlightedRowId, setHighlightedRowId] = useState(null)
+  const [isScrolling, setIsScrolling] = useState(false)
 
   const dragCol = useRef(null)
   const parentRef = useRef(null)
@@ -407,8 +408,8 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, o
   const rowVirtualizer = useVirtualizer({
     count: table.getRowModel().rows.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => 40,
-    overscan: 10,
+    estimateSize: () => 36,
+    overscan: 16,
   })
 
   useEffect(() => {
@@ -699,7 +700,7 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, o
       )}
 
     <div className="table-container flex-1 flex flex-col min-h-0 min-w-0">
-        <div ref={parentRef} className="flex-1 min-h-0 min-w-0 overflow-auto custom-scrollbar">
+        <div ref={parentRef} className={cls("flex-1 min-h-0 min-w-0 overflow-auto custom-scrollbar", isScrolling && 'scrolling')} style={{ contain: 'strict', willChange: 'scroll-position' }}>
           <table className="min-w-full table-fixed" style={{ width: table.getTotalSize() }}>
             <thead className="table-header sticky top-0 z-10">
               
