@@ -71,17 +71,6 @@
     overflow-wrap: anywhere;
 }
 
-
-.table-cell-input {
-  @apply w-full outline-none text-gray-900 font-medium;
-   overflow: visible;
-    white-space: normal;
-    text-overflow: clip;
-    word-wrap: break-word;
-    word-break: break-word;
-    overflow-wrap: anywhere;
-}
-
 .cell-truncate{
     position: relative;
     display: block;

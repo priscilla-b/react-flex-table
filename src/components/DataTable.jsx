@@ -61,33 +61,58 @@ function extractFilterStateFromColumns(filtersArray) {
 }
 
 function EditableCell({ getValue, row, column, table }) {
-  const initial = getValue()
-  const [value, setValue] = useState(initial)
-  const [editing, setEditing] = useState(false)
-  const save = useRef(debounce((val)=>{
-    table.options.meta?.onUpdateCell?.(row.original.id, column.id, val)
-  }, 400)).current
+  const initial = getValue();
+  const [value, setValue] = useState(initial);
+  const [editing, setEditing] = useState(false);
 
-  useEffect(()=>{ setValue(initial) }, [initial])
+  const saveDebounced = useRef(
+    debounce((val) => {
+      table.options.meta?.onUpdateCell?.(row.original.id, column.id, val);
+    }, 300)
+  ).current;
+
+  useEffect(() => { setValue(initial); }, [initial]);
+
+  const onExit = useCallback(() => setEditing(false), []);
+  const onSaveNow = useCallback(() => {
+    saveDebounced.flush?.();
+    setEditing(false);
+  }, [saveDebounced]);
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter') {
-      setEditing(v => !v)
+      onSaveNow();
     } else if (e.key === 'Escape') {
-      setValue(initial)
-      setEditing(false)
+      setValue(initial);
+      onExit();
     }
-  }
+  };
 
-  const handleSave = () => {
-    setEditing(false)
-    save(value)
-  }
+  const textareaRef = useRef(null);
+
+  const syncTextareaHeight = useCallback(() => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    ta.style.height = 'auto';
+    ta.style.height = `${ta.scrollHeight}px`;
+  }, []);
+
+  useEffect(() => {
+    if (!editing) return;
+    syncTextareaHeight();
+  }, [editing, value, syncTextareaHeight]);
+
+  // focus when entering edit
+  useEffect(() => {
+    if (!editing) return;
+    const el = textareaRef.current;
+    el?.focus?.();
+  }, [editing, value]);
 
   return (
     <div
       tabIndex={0}
-      onClick={()=>setEditing(true)}
+      onClick={() => setEditing(true)}
       onKeyDown={handleKeyDown}
       className={cls(
         'relative group cursor-pointer transition-all duration-200',
@@ -96,26 +121,26 @@ function EditableCell({ getValue, row, column, table }) {
       title="click to edit"
     >
       {editing ? (
-        <input
-          className="table-cell-input"
-          value={value ?? ''}
-          onChange={e=>{ setValue(e.target.value); save(e.target.value) }}
-          onBlur={handleSave}
-          onKeyDown={handleKeyDown}
-          autoFocus
-        />
-      ) : (
+          <textarea
+            ref={textareaRef}
+            rows={1}
+            className="w-full resize-none leading-5 bg-transparent outline-none"
+            value={value ?? ''}
+            onChange={(e) => { setValue(e.target.value); saveDebounced(e.target.value); syncTextareaHeight(); }}
+            onBlur={onExit}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') { setValue(initial); onExit(); }
+            }}
+          />
+        ) :  (
         <div className="cell-truncate">
           <span className="cell-truncate-inner block">
             {String(value ?? '')}
           </span>
         </div>
       )}
-      {!editing && (
-        <div className="absolute inset-0 bg-blue-50 opacity-0 group-hover:opacity-20 transition-opacity duration-200 pointer-events-none rounded" />
-      )}
     </div>
-  )
+  );
 }
 
 export default function DataTable({ columns: userColumns, fetcher, entityName, onCreate, onBulkDelete, onBulkEdit, onBulkDuplicate, onBulkUpload, onPatch }) {
@@ -213,7 +238,7 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, o
             onChange={row.getToggleSelectedHandler()} 
           />
         ),
-        size: 48,
+        size: 34,
         enableResizing: false
       },
       ...userColumns.map(c => ({
