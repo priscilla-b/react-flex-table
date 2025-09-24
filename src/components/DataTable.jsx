@@ -16,6 +16,7 @@ import BulkDuplicateDialog from './BulkDuplicateDialog'
 import NewRecordDialog from './NewRecordDialog'
 import Filters, { createDefaultFilterState, sanitizeFilterState } from './Filters'
 import { fetchViews, createView, updateView, deleteViewServer } from '../lib/dataFetcher'
+import Modal from './Modal'
 
 const RESOURCE = 'leads'
 const FILTER_COLUMN_ID = '__filters__'
@@ -259,6 +260,8 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, o
   const [bulkDuplicateOpen, setBulkDuplicateOpen] = useState(false)
   const [bulkEditLoading, setBulkEditLoading] = useState(false)
   const [bulkDuplicateLoading, setBulkDuplicateLoading] = useState(false)
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false)
+  const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
   const [createLoading, setCreateLoading] = useState(false)
   const [highlightedRowId, setHighlightedRowId] = useState(null)
@@ -603,15 +606,7 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, o
             onAdd={() => setCreateOpen(true)}
             onDeleteSelected={async () => {
             if (!onBulkDelete || !selectedIds.length) return
-            try {
-                await onBulkDelete(selectedIds)
-                setRowSelection({})
-                setRefreshTrigger(prev => prev + 1)
-                toast.success(`Deleted ${selectedIds.length} ${entityName.toLowerCase()}`)
-            } catch (error) {
-                console.error('Failed to delete records:', error)
-                toast.error('Failed to delete selected records')
-            }
+            setBulkDeleteOpen(true)
             }}
             onBulkEdit={onBulkEdit ? () => { if (!hasSelection) return; setBulkEditOpen(true) } : undefined}
             onBulkDuplicate={onBulkDuplicate ? () => { if (!hasSelection) return; setBulkDuplicateOpen(true) } : undefined}
@@ -667,6 +662,40 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, o
           loading={bulkDuplicateLoading}
           onConfirm={handleBulkDuplicateConfirm}
         />
+      )}
+
+      {/* Bulk Delete Confirmation */}
+      {onBulkDelete && (
+        <Modal
+          open={bulkDeleteOpen}
+          onClose={() => { if (!bulkDeleteLoading) setBulkDeleteOpen(false) }}
+          title={`Delete ${selectedCount} ${entityName.toLowerCase()}?`}
+          description="This action cannot be undone. The selected records will be permanently removed."
+          actions={[
+            { label: 'Cancel', onClick: () => { if (!bulkDeleteLoading) setBulkDeleteOpen(false) } },
+            { label: bulkDeleteLoading ? 'Deleting…' : 'Delete', variant: 'danger', disabled: bulkDeleteLoading, onClick: async () => {
+              if (!onBulkDelete || !selectedIds.length) return
+              setBulkDeleteLoading(true)
+              try {
+                await onBulkDelete(selectedIds)
+                setBulkDeleteOpen(false)
+                setRowSelection({})
+                setRefreshTrigger(prev => prev + 1)
+                toast.success(`Deleted ${selectedIds.length} ${entityName.toLowerCase()}`)
+              } catch (error) {
+                console.error('Failed to delete records:', error)
+                toast.error('Failed to delete selected records')
+              } finally {
+                setBulkDeleteLoading(false)
+              }
+            } }
+          ]}
+        >
+          <div className="text-sm text-gray-700">
+            <p>You're about to delete <span className="font-semibold">{selectedCount}</span> {entityName.toLowerCase()}.</p>
+            <p className="mt-2">Please confirm to proceed.</p>
+          </div>
+        </Modal>
       )}
 
     <div className="table-container flex-1 flex flex-col min-h-0 min-w-0">
