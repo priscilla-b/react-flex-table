@@ -8,6 +8,7 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import cls from 'classnames'
 import debounce from 'lodash.debounce'
 import Toolbar from './Toolbar'
+import { useToast } from './ToastProvider'
 import ColumnVisibilityMenu from './ColumnVisibilityMenu'
 import SavedViews from './SavedViews'
 import BulkEditDialog from './BulkEditDialog'
@@ -239,13 +240,14 @@ function EditableCell({ getValue, row, column, table }) {
 
 
 export default function DataTable({ columns: userColumns, fetcher, entityName, onCreate, onBulkDelete, onBulkEdit, onBulkDuplicate, onBulkUpload, onPatch }) {
+  const toast = useToast()
   const [data, setData] = useState([])
   const [rowSelection, setRowSelection] = useState({})
   const [sorting, setSorting] = useState([])
   const [filterState, setFilterState] = useState(createDefaultFilterState())
   const [columnOrder, setColumnOrder] = useState([])
   const [columnVisibility, setColumnVisibility] = useState({})
-  const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 25 })
+  const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 100 })
   const [views, setViews] = useState([])
   const [activeViewId, setActiveViewId] = useState(null)
   const [viewLoading, setViewLoading] = useState(false)
@@ -470,7 +472,7 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, o
     setSorting(st.sorting ?? [])
     setColumnOrder(st.columnOrder ?? [])
     setColumnVisibility(st.columnVisibility ?? {})
-    setPagination(st.pagination ?? { pageIndex: 0, pageSize: 25 })
+    setPagination(st.pagination ?? { pageIndex: 0, pageSize: 100 })
 
     const nextFilters = extractFilterStateFromColumns(st.columnFilters)
     setFilterState(prev => (filterStatesEqual(prev, nextFilters) ? prev : nextFilters))
@@ -521,8 +523,10 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, o
       setBulkEditOpen(false)
       setRowSelection({})
       setRefreshTrigger(prev => prev + 1)
+      toast.success(`Updated ${selectedIds.length} ${entityName.toLowerCase()} successfully`)
     } catch (error) {
       console.error('Failed to bulk edit records:', error)
+      toast.error('Failed to update selected records')
     } finally {
       setBulkEditLoading(false)
     }
@@ -537,8 +541,12 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, o
       setBulkDuplicateOpen(false)
       setRowSelection({})
       setRefreshTrigger(prev => prev + 1)
+      const copies = Number(options?.copies || 1)
+      const total = copies * selectedIds.length
+      toast.success(`Duplicated ${total} ${entityName.toLowerCase()}`)
     } catch (error) {
       console.error('Failed to duplicate records:', error)
+      toast.error('Failed to duplicate selected records')
     } finally {
       setBulkDuplicateLoading(false)
     }
@@ -599,8 +607,10 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, o
                 await onBulkDelete(selectedIds)
                 setRowSelection({})
                 setRefreshTrigger(prev => prev + 1)
+                toast.success(`Deleted ${selectedIds.length} ${entityName.toLowerCase()}`)
             } catch (error) {
                 console.error('Failed to delete records:', error)
+                toast.error('Failed to delete selected records')
             }
             }}
             onBulkEdit={onBulkEdit ? () => { if (!hasSelection) return; setBulkEditOpen(true) } : undefined}
@@ -845,7 +855,7 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, o
               onChange={e=>setPagination({ ...pagination, pageSize: Number(e.target.value), pageIndex: 0 })}
               disabled={loading}
             >
-              {[10,25,50,100].map(s=> <option key={s} value={s}>{s} per page</option>)}
+              {[100,200,300,400].map(s=> <option key={s} value={s}>{s} per page</option>)}
             </select>
           </div>
         </div>
