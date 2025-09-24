@@ -721,6 +721,7 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, o
                           style={headerStyle}
                           className={cls(
                             'table-header-cell',
+                            header.column.id === 'select' && 'checkbox-cell',
                             header.column.id === dragging && 'dragging'
                           )}
                           draggable
@@ -743,30 +744,36 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, o
                         }}
                       >
                         {header.isPlaceholder ? null : (
-                          <div className="flex items-center gap-2">
-                            <button 
-                              onClick={header.column.getToggleSortingHandler()} 
-                              className="flex items-center gap-1 hover:text-blue-600 transition-colors duration-200 text-left"
-                            >
+                          header.column.id === 'select' ? (
+                            <div className="flex items-center justify-center">
                               {flexRender(header.column.columnDef.header, header.getContext())}
-                              {header.column.getIsSorted() && (
-                                <svg className="w-3 h-3 ml-1" fill="currentColor" viewBox="0 0 20 20">
-                                  {header.column.getIsSorted() === 'asc' ? (
-                                    <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
-                                  ) : (
-                                    <path fillRule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clipRule="evenodd" />
-                                  )}
-                                </svg>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <button 
+                                onClick={header.column.getToggleSortingHandler()} 
+                                className="flex items-center gap-1 hover:text-blue-600 transition-colors duration-200 text-left"
+                              >
+                                {flexRender(header.column.columnDef.header, header.getContext())}
+                                {header.column.getIsSorted() && (
+                                  <svg className="w-3 h-3 ml-1" fill="currentColor" viewBox="0 0 20 20">
+                                    {header.column.getIsSorted() === 'asc' ? (
+                                      <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                                    ) : (
+                                      <path fillRule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clipRule="evenodd" />
+                                    )}
+                                  </svg>
+                                )}
+                              </button>
+                              {header.column.getCanResize() && (
+                                <div
+                                  onMouseDown={header.getResizeHandler()}
+                                  onTouchStart={header.getResizeHandler()}
+                                  className="resize-handle w-1 h-4 bg-gray-300 hover:bg-blue-500 cursor-col-resize transition-colors duration-200"
+                                />
                               )}
-                            </button>
-                            {header.column.getCanResize() && (
-                              <div
-                                onMouseDown={header.getResizeHandler()}
-                                onTouchStart={header.getResizeHandler()}
-                                className="resize-handle w-1 h-4 bg-gray-300 hover:bg-blue-500 cursor-col-resize transition-colors duration-200"
-                              />
-                            )}
-                          </div>
+                            </div>
+                          )
                         )}
                       </th>
                     )})}
