@@ -266,9 +266,11 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, o
   const [createLoading, setCreateLoading] = useState(false)
   const [highlightedRowId, setHighlightedRowId] = useState(null)
   const [isScrolling, setIsScrolling] = useState(false)
+  const [isResizing, setIsResizing] = useState(false)
 
   const dragCol = useRef(null)
   const parentRef = useRef(null)
+  const measureCanvasRef = useRef(null)
 
 
 
@@ -434,6 +436,17 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, o
     loadViews()
     return () => {
       mounted = false
+    }
+  }, [])
+
+  // Clear resizing flag on pointer up globally so drag state doesn't stick
+  useEffect(() => {
+    const onUp = () => setIsResizing(false)
+    window.addEventListener('mouseup', onUp)
+    window.addEventListener('touchend', onUp)
+    return () => {
+      window.removeEventListener('mouseup', onUp)
+      window.removeEventListener('touchend', onUp)
     }
   }, [])
 
@@ -721,11 +734,11 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, o
                           key={header.id}
                           style={headerStyle}
                           className={cls(
-                            'table-header-cell',
+                            'table-header-cell relative select-none',
                             header.column.id === 'select' && 'checkbox-cell',
                             header.column.id === dragging && 'dragging'
                           )}
-                          draggable
+                          draggable={!isResizing}
                           onDragStart={()=>{ 
                             dragCol.current = header.column.id
                             setDragging(header.column.id)
@@ -766,13 +779,19 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, o
                                   </svg>
                                 )}
                               </button>
-                              {header.column.getCanResize() && (
-                                <div
-                                  onMouseDown={header.getResizeHandler()}
-                                  onTouchStart={header.getResizeHandler()}
-                                  className="resize-handle w-1 h-4 bg-gray-300 hover:bg-blue-500 cursor-col-resize transition-colors duration-200"
-                                />
-                              )}
+                            {header.column.getCanResize() && (
+                              <div
+                                role="separator"
+                                aria-orientation="vertical"
+                                aria-label="Resize column"
+                                title="Drag to resize"
+                                onMouseDown={(e)=>{ e.stopPropagation(); setIsResizing(true); header.getResizeHandler()(e) }}
+                                onTouchStart={(e)=>{ setIsResizing(true); header.getResizeHandler()(e) }}
+                                onDoubleClick={(e)=>{ e.stopPropagation();  setIsResizing(false); }}
+                                onClick={(e)=> e.stopPropagation() }
+                                className="resize-handle w-1 h-4 bg-gray-300 hover:bg-blue-500 cursor-col-resize transition-colors duration-200"
+                              />
+                            )}
                             </div>
                           )
                         )}
