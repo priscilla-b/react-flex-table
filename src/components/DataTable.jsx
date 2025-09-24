@@ -106,7 +106,7 @@ function EditableCell({ getValue, row, column, table }) {
         />
       ) : (
         <div className="cell-truncate">
-          <span className="cell-truncate-inner block group-hover:text-blue-600 transition-colors duration-200">
+          <span className="cell-truncate-inner block">
             {String(value ?? '')}
           </span>
         </div>
@@ -237,6 +237,12 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, o
     onPaginationChange: setPagination,
     getCoreRowModel: getCoreRowModel(),
     enableColumnResizing: true,
+    columnResizeMode: 'onChange',
+    defaultColumn: {
+      size: 150,
+      minSize: 80,
+      maxSize: 300,
+    },
     manualPagination: true,
     pageCount: Math.ceil(total / pagination.pageSize) || -1,
     autoResetPageIndex: false,
@@ -254,8 +260,7 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, o
           }
         }
       }
-    },
-    columnResizeMode: 'onChange'
+    }
   })
 
   const rowVirtualizer = useVirtualizer({
@@ -443,42 +448,43 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, o
   }
 
   return (
-    <div className="animate-fade-in">
-      <Toolbar
-        onAdd={() => setCreateOpen(true)}
-        onDeleteSelected={async () => {
-          if (!onBulkDelete || !selectedIds.length) return
-          try {
-            await onBulkDelete(selectedIds)
-            setRowSelection({})
-            setRefreshTrigger(prev => prev + 1)
-          } catch (error) {
-            console.error('Failed to delete records:', error)
-          }
-        }}
-        onBulkEdit={onBulkEdit ? () => { if (!hasSelection) return; setBulkEditOpen(true) } : undefined}
-        onBulkDuplicate={onBulkDuplicate ? () => { if (!hasSelection) return; setBulkDuplicateOpen(true) } : undefined}
-        onBulkUpload={typeof onBulkUpload === 'function' ? onBulkUpload : undefined}
-        selectedCount={selectedCount}
-      >
-        <ColumnVisibilityMenu table={table} />
-        <Filters
-          filters={filterState}
-          onApply={applyFilters}
-          onClear={clearFilters}
-          options={filterOptions}
-        />
-        <SavedViews 
-          views={views}
-          onSave={saveCurrentView}
-          onLoad={loadViewById}
-          onDelete={deleteViewById}
-          onEditMeta={editViewMeta}
-          onSaveState={saveCurrentStateToView}
-          loading={viewLoading}
-        />
-      </Toolbar>
-
+    <div className="animate-fade-in flex flex-col h-full">
+      <div className="flex-shrink-0">
+        <Toolbar
+            onAdd={() => setCreateOpen(true)}
+            onDeleteSelected={async () => {
+            if (!onBulkDelete || !selectedIds.length) return
+            try {
+                await onBulkDelete(selectedIds)
+                setRowSelection({})
+                setRefreshTrigger(prev => prev + 1)
+            } catch (error) {
+                console.error('Failed to delete records:', error)
+            }
+            }}
+            onBulkEdit={onBulkEdit ? () => { if (!hasSelection) return; setBulkEditOpen(true) } : undefined}
+            onBulkDuplicate={onBulkDuplicate ? () => { if (!hasSelection) return; setBulkDuplicateOpen(true) } : undefined}
+            onBulkUpload={typeof onBulkUpload === 'function' ? onBulkUpload : undefined}
+            selectedCount={selectedCount}
+        >
+            <ColumnVisibilityMenu table={table} />
+            <Filters
+            filters={filterState}
+            onApply={applyFilters}
+            onClear={clearFilters}
+            options={filterOptions}
+            />
+            <SavedViews 
+            views={views}
+            onSave={saveCurrentView}
+            onLoad={loadViewById}
+            onDelete={deleteViewById}
+            onEditMeta={editViewMeta}
+            onSaveState={saveCurrentStateToView}
+            loading={viewLoading}
+            />
+        </Toolbar>
+      </div>
       {createOpen && (
         <NewRecordDialog
           open={createOpen}
@@ -509,11 +515,11 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, o
         />
       )}
 
-      <div className="table-container">
-        <div ref={parentRef} className="max-h-[520px] overflow-auto custom-scrollbar border-t border-gray-200">
-          <div className="overflow-x-auto">
-            <table className="min-w-full table-auto">
-              <thead className="table-header">
+    <div className="table-container flex-1 flex flex-col min-h-0">
+        <div ref={parentRef} className="flex-1 overflow-auto custom-scrollbar">
+          <table className="min-w-full table-auto">
+            <thead className="table-header sticky top-0 z-10">
+              
                 {table.getHeaderGroups().map(headerGroup => (
                   <tr key={headerGroup.id}>
                     {headerGroup.headers.map(header => (
@@ -547,16 +553,24 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, o
                           <div className="flex items-center gap-2">
                             <button 
                               onClick={header.column.getToggleSortingHandler()} 
-                              className="flex items-center gap-2 hover:text-blue-600 transition-colors duration-200"
+                              className="flex items-center gap-1 hover:text-blue-600 transition-colors duration-200 text-left"
                             >
                               {flexRender(header.column.columnDef.header, header.getContext())}
-                              <span className="sort-indicator">{renderSortIndicator(header)}</span>
+                              {header.column.getIsSorted() && (
+                                <svg className="w-3 h-3 ml-1" fill="currentColor" viewBox="0 0 20 20">
+                                  {header.column.getIsSorted() === 'asc' ? (
+                                    <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                                  ) : (
+                                    <path fillRule="evenodd" d="M14.707 12.707a1 1 0 01-1.414 0L10 9.414l-3.293 3.293a1 1 0 01-1.414-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 010 1.414z" clipRule="evenodd" />
+                                  )}
+                                </svg>
+                              )}
                             </button>
                             {header.column.getCanResize() && (
                               <div
                                 onMouseDown={header.getResizeHandler()}
                                 onTouchStart={header.getResizeHandler()}
-                                className="resize-handle"
+                                className="resize-handle w-1 h-4 bg-gray-300 hover:bg-blue-500 cursor-col-resize transition-colors duration-200"
                               />
                             )}
                           </div>
@@ -591,7 +605,7 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, o
                           'table-row absolute left-0 right-0',
                           isSelected && 'selected',
                           highlightedRowId === row.original?.id && 'row-highlight',
-                          virtualRow.index % 2 === 0 && 'bg-white'
+                          virtualRow.index % 2 === 0 ? 'row-even' : 'row-odd'
                         )}
                         style={{ transform: `translateY(${virtualRow.start}px)` }}
                       >
@@ -625,55 +639,54 @@ export default function DataTable({ columns: userColumns, fetcher, entityName, o
                 )}
               </tbody>
             </table>
-          </div>
         </div>
       </div>
 
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mt-4 animate-slide-in">
-        <div className="text-xs sm:text-sm text-gray-600">
-          <span className="font-medium">{total.toLocaleString()}</span> {entityName.toLowerCase()}
-          {selectedCount > 0 && (
-            <span className="ml-2 text-blue-600 font-medium">
-              - {selectedCount} selected
+     <div className="flex-shrink-0 border-t border-gray-200 bg-gray-50 px-6 py-3">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div className="text-sm text-gray-600">
+            <span className="font-medium">{total.toLocaleString()}</span> {entityName.toLowerCase()}
+            {selectedCount > 0 && (
+              <span className="ml-2 text-blue-600 font-medium">
+                - {selectedCount} selected
+              </span>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
+              onClick={()=>setPagination(p=>({...p, pageIndex: Math.max(0, p.pageIndex-1)}))}
+              disabled={pagination.pageIndex===0 || loading}
+            >
+              <span className="hidden sm:inline">Previous</span>
+              <span className="sm:hidden">Prev</span>
+            </button>
+            <span className="text-sm font-medium text-gray-700 whitespace-nowrap px-2">
+              <span className="hidden sm:inline">Page {pagination.pageIndex+1} of {pageCount}</span>
+              <span className="sm:hidden">{pagination.pageIndex+1}/{pageCount}</span>
             </span>
-          )}
-        </div>
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-          <button
-            className="pagination-button"
-            onClick={()=>setPagination(p=>({...p, pageIndex: Math.max(0, p.pageIndex-1)}))}
-            disabled={pagination.pageIndex===0 || loading}
-          >
-            <span className="hidden sm:inline">{'<- Previous'}</span>
-            <span className="sm:hidden">{'<- Prev'}</span>
-          </button>
-          <span className="text-xs sm:text-sm font-medium text-gray-700 whitespace-nowrap">
-            <span className="hidden sm:inline">Page {pagination.pageIndex+1} of {pageCount}</span>
-            <span className="sm:hidden">{pagination.pageIndex+1}/{pageCount}</span>
-          </span>
-          <button
-            className="pagination-button"
-            onClick={()=>setPagination(p=>({...p, pageIndex: Math.min((pageCount-1), p.pageIndex+1)}))}
-            disabled={pagination.pageIndex+1>=pageCount || loading}
-          >
-            <span className="hidden sm:inline">{'Next ->'}</span>
-            <span className="sm:hidden">{'Next ->'}</span>
-          </button>
-          <select
-            className="pagination-select"
-            value={pagination.pageSize}
-            onChange={e=>setPagination({ ...pagination, pageSize: Number(e.target.value), pageIndex: 0 })}
-            disabled={loading}
-          >
-            {[10,25,50,100].map(s=> <option key={s} value={s}>{s} per page</option>)}
-          </select>
+            <button
+              className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200"
+              onClick={()=>setPagination(p=>({...p, pageIndex: Math.min((pageCount-1), p.pageIndex+1)}))}
+              disabled={pagination.pageIndex+1>=pageCount || loading}
+            >
+              <span className="hidden sm:inline">Next</span>
+              <span className="sm:hidden">Next</span>
+            </button>
+            <select
+              className="px-3 py-1.5 text-sm border border-gray-300 rounded-md bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              value={pagination.pageSize}
+              onChange={e=>setPagination({ ...pagination, pageSize: Number(e.target.value), pageIndex: 0 })}
+              disabled={loading}
+            >
+              {[10,25,50,100].map(s=> <option key={s} value={s}>{s} per page</option>)}
+            </select>
+          </div>
         </div>
       </div>
     </div>
   )
 }
-
-
 
 
 

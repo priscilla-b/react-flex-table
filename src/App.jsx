@@ -25,8 +25,8 @@ export default function App() {
   ], [])
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
-      <header className="bg-white/80 backdrop-blur-sm border-b border-gray-200 shadow-sm">
+    <div className="h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex flex-col">
+      <header className="bg-white/80 backdrop-blur-sm border-b border-gray-200 shadow-sm flex-shrink-0">
         <div className="px-4 sm:px-6 py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 bg-gradient-to-br from-blue-600 to-blue-700 rounded-lg flex items-center justify-center">
@@ -42,9 +42,9 @@ export default function App() {
         </div>
       </header>
 
-      <main className="p-3 sm:p-6">
-        <div className="max-w-7xl mx-auto">
-          <div className="bg-white/70 backdrop-blur-sm rounded-xl sm:rounded-2xl shadow-xl border border-white/20 p-3 sm:p-6">
+      <main className="flex-1 p-2 sm:p-4 lg:p-6 overflow-hidden">
+        <div className="w-full h-full">
+          <div className="bg-white/70 backdrop-blur-sm rounded-xl sm:rounded-2xl shadow-xl border border-white/20 p-2 sm:p-4 lg:p-6 h-full flex flex-col">
             <DataTable
               columns={columns}
               fetcher={fetchLeads}
