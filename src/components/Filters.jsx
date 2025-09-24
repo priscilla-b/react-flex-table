@@ -454,22 +454,24 @@ export default function Filters({ filters = createDefaultFilterState(), onApply,
                   </select>
                 </div>
               )}
+
               <div className="p-3 space-y-3">
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div>
-                    <label className="filter-label">Column</label>
-                    <select
-                      className="filter-input"
-                      value={condition.field}
-                      onChange={e => updateConditionField(condition.id, e.target.value)}
-                    >
-                      {FIELD_CONFIG.map(option => (
-                        <option key={option.key} value={option.key}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                <div className="w-full">
+                  <label className="filter-label">Column</label>
+                  <select
+                    className="filter-input"
+                    value={condition.field}
+                    onChange={e => updateConditionField(condition.id, e.target.value)}
+                  >
+                    {FIELD_CONFIG.map(option => (
+                      <option key={option.key} value={option.key}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="filter-label">Condition</label>
                     <select
@@ -484,11 +486,13 @@ export default function Filters({ filters = createDefaultFilterState(), onApply,
                       ))}
                     </select>
                   </div>
+
                   <div>
                     <label className="filter-label">Value</label>
                     {renderValueInput(condition)}
                   </div>
                 </div>
+
                 <div className="flex justify-end">
                   <button
                     type="button"
@@ -500,7 +504,8 @@ export default function Filters({ filters = createDefaultFilterState(), onApply,
                 </div>
               </div>
             </div>
-          )
+          );
+
         })
       )}
 

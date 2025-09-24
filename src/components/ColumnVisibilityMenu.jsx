@@ -44,7 +44,7 @@ export default function ColumnVisibilityMenu({ table }) {
       </button>
 
       {open && (
-        <div className="dropdown-menu animate-fade-in w-[260px]">
+        <div className="dropdown-menu animate-fade-in w-[260px] min-w-[200px]">
           <div className="text-xs font-semibold text-slate-400 uppercase tracking-[0.2em] mb-2">Show / hide columns</div>
           <div className="max-h-64 overflow-y-auto space-y-1">
             {table.getAllLeafColumns().map(col => (

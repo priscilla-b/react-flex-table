@@ -90,7 +90,7 @@ export default function SavedViews({
       </button>
 
       {open && (
-        <div className="dropdown-menu animate-slide-in min-w-[230px]">
+        <div className="dropdown-menu animate-slide-in w-[300px] min-w-[230px]">
           <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
             Saved Views
           </div>
