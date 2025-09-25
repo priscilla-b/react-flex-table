@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
+import React, { useCallback, useRef, useState } from 'react'
+import useClickOutside from '../hooks/useClickOutside'
 
 export default function SavedViews({
   views,
@@ -16,30 +16,8 @@ export default function SavedViews({
   const [open, setOpen] = useState(false)
   const inputRef = useRef(null)
   const containerRef = useRef(null)
-  const menuRef = useRef(null)
-  const [anchorRect, setAnchorRect] = useState(null)
   const closeViews = useCallback(() => setOpen(false), [])
-
-  // When opening, capture anchor rect for positioning
-  useEffect(() => {
-    if (!open) return
-    const el = containerRef.current
-    if (!el) return
-    const rect = el.getBoundingClientRect()
-    setAnchorRect({ top: rect.top, left: rect.left, right: rect.right, bottom: rect.bottom, width: rect.width, height: rect.height })
-  }, [open])
-
-  // Click outside handler that accounts for portal content
-  useEffect(() => {
-    if (!open) return
-    const onDown = (e) => {
-      const inTrigger = containerRef.current?.contains(e.target)
-      const inMenu = menuRef.current?.contains(e.target)
-      if (!inTrigger && !inMenu) closeViews()
-    }
-    document.addEventListener('mousedown', onDown)
-    return () => document.removeEventListener('mousedown', onDown)
-  }, [open, closeViews])
+  useClickOutside(containerRef, closeViews, open)
 
   const [saveName, setSaveName] = useState('');
   const [saveVisibility, setSaveVisibility] = useState('private')
@@ -111,16 +89,8 @@ export default function SavedViews({
         )}
       </button>
 
-      {open && anchorRect && createPortal(
-        <div
-          ref={menuRef}
-          className="fixed z-[9999]"
-          style={{
-            top: Math.round(anchorRect.bottom + 8),
-            left: Math.max(8, Math.min(anchorRect.left, (typeof window !== 'undefined' ? window.innerWidth : 0) - 320 - 8)),
-          }}
-        >
-          <div className="dropdown-menu animate-slide-in w-[92vw] sm:min-w-[230px] sm:w-[300px]">
+      {open && (
+        <div className="dropdown-menu animate-slide-in w-[400px] min-w-[230px]">
           <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
             Saved Views
           </div>
@@ -291,9 +261,8 @@ export default function SavedViews({
               </ul>
             )}
           </div>
-          </div>
-        </div>, document.body)
-      }
+        </div>
+      )}
     </div>
   );
 

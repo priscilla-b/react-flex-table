@@ -107,6 +107,7 @@ npm run dev      # http://localhost:5173
 - Filtering and sorting logic is simple; complex scenarios (e.g. nested conditions, fuzzy text search) would need more robust handling.   
 - Only light client validation checks; minimal server validation.
 - SQLite makes it easy to run locally, but isn’t a scalable solution for multi-user deployments. 
+- Mobile-responsiveness limited for some features
 
 ---
 

@@ -288,7 +288,7 @@
   }
   
   .dropdown-menu {
-    @apply max-w-[92vw];
+    @apply max-w-[92vw] right-0;
   }
   
   .virtual-table-container {

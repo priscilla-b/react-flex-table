@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
+import useClickOutside from '../hooks/useClickOutside'
 
 const SIMPLE_FILTER_TEMPLATE = {
   company: '',
@@ -228,28 +228,8 @@ export default function Filters({ filters = createDefaultFilterState(), onApply,
   const [simpleDraft, setSimpleDraft] = useState(createEmptySimpleFilters())
   const [advancedDraft, setAdvancedDraft] = useState(createDefaultAdvancedState())
   const containerRef = useRef(null)
-  const menuRef = useRef(null)
-  const [anchorRect, setAnchorRect] = useState(null)
   const closeFilters = useCallback(() => setOpen(false), [])
-
-  useEffect(() => {
-    if (!open) return
-    const el = containerRef.current
-    if (!el) return
-    const rect = el.getBoundingClientRect()
-    setAnchorRect({ top: rect.top, left: rect.left, right: rect.right, bottom: rect.bottom, width: rect.width, height: rect.height })
-  }, [open])
-
-  useEffect(() => {
-    if (!open) return
-    const onDown = (e) => {
-      const inTrigger = containerRef.current?.contains(e.target)
-      const inMenu = menuRef.current?.contains(e.target)
-      if (!inTrigger && !inMenu) closeFilters()
-    }
-    document.addEventListener('mousedown', onDown)
-    return () => document.removeEventListener('mousedown', onDown)
-  }, [open, closeFilters])
+  useClickOutside(containerRef, closeFilters, open)
 
 
   const appliedState = useMemo(() => sanitizeFilterState(filters), [filters])
@@ -554,16 +534,8 @@ export default function Filters({ filters = createDefaultFilterState(), onApply,
         Filters{activeCount ? ` (${activeCount})` : ''}
       </button>
 
-      {open && anchorRect && createPortal(
-        <div
-          ref={menuRef}
-          className="fixed z-[9999]"
-          style={{
-            top: Math.round(anchorRect.bottom + 8),
-            left: Math.max(8, Math.min(anchorRect.left, (typeof window !== 'undefined' ? window.innerWidth : 0) - 360 - 8)),
-          }}
-        >
-          <div className="dropdown-menu animate-slide-in w-[92vw] sm:min-w-[320px] sm:max-w-md">
+      {open && (
+        <div className="dropdown-menu animate-slide-in min-w-[320px] max-w-mddropdown-menu animate-slide-in w-[92vw] sm:min-w-[320px] sm:max-w-md">
           <div className="flex items-center justify-between mb-4">
             <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Configure Filters</div>
             <div className="flex rounded-lg overflow-hidden border border-gray-200 text-xs">
@@ -707,9 +679,8 @@ export default function Filters({ filters = createDefaultFilterState(), onApply,
               </div>
             </div>
           </form>
-          </div>
-        </div>, document.body)
-      }
+        </div>
+      )}
     </div>
   )
 }
