@@ -27,7 +27,8 @@ It supports large datasets, inline editing, saved views, filter builder, bulk ac
 
 
 ## 🎥 Demo
-[![Watch the demo](https://cdn.loom.com/sessions/thumbnails/50a0de6b8ee14bf6ad44aa9539990bab-00001.gif)](https://www.loom.com/share/50a0de6b8ee14bf6ad44aa9539990bab)
+[![Watch the demo](./src/assets/demo.gif)](https://www.loom.com/share/50a0de6b8ee14bf6ad44aa9539990bab)
+
 
 
 ## 📂 Project Structure
