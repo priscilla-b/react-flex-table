@@ -23,7 +23,12 @@ It supports large datasets, inline editing, saved views, filter builder, bulk ac
 - **Advanced filters** – Build flexible conditions with AND/OR logic, allowing both quick searches and complex queries.  
 - **Bulk actions** – Edit, duplicate, or delete multiple records at once, with clear confirmation and feedback.  
 - **User feedback** – Newly added rows are highlighted for context, and toast notifications confirm actions like saves, edits, or deletes.  
-- **Accessible & responsive UI** – Keyboard shortcuts (Enter, Escape) for editing, sticky headers, hover/focus indicators, and a layout that works across screen sizes.  
+- **Accessible & responsive UI** – Keyboard shortcuts (Enter, Escape) for editing, sticky headers, hover/focus indicators, and a layout that works across screen sizes.
+
+
+## 🎥 Demo
+[![Watch the demo](https://cdn.loom.com/sessions/thumbnails/50a0de6b8ee14bf6ad44aa9539990bab-00001.gif)](https://www.loom.com/share/50a0de6b8ee14bf6ad44aa9539990bab)
+
 
 ## 📂 Project Structure
 
